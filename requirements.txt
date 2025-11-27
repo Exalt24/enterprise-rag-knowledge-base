@@ -1,0 +1,25 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+
+# LangChain & RAG (Modern Packages - No Deprecations)
+langchain
+langchain-community
+langchain-ollama
+langchain-huggingface
+
+# Vector Database & Embeddings
+chromadb
+sentence-transformers
+
+# Document Processing
+pypdf
+python-docx
+
+# Utilities
+python-dotenv
+
+# Optional: Redis for caching (install later if needed)
+# redis
