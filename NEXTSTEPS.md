@@ -26,24 +26,7 @@
 
 ## 🔄 IMMEDIATE NEXT STEPS
 
-### 1. Clean Up Debug Logging (15 min)
-**Priority: High**
-
-Remove debug prints added during deployment troubleshooting:
-
-**Files to clean:**
-- `backend/app/main.py` (lines 45-53) - Remove explicit service loading and traceback
-- `backend/app/services/generation.py` (lines 42-43, 83-84) - Remove DEBUG prints
-
-**Run after cleanup:**
-```bash
-cd backend && python -m app.main  # Test locally
-git add -A && git commit -m "Remove debug logging" && git push
-```
-
----
-
-### 2. Code Review (1-2 hours)
+### 1. Code Review (1-2 hours)
 **Priority: High - You mentioned wanting to do this**
 
 Review entire codebase for:
