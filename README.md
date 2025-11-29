@@ -30,6 +30,17 @@ Production-ready Retrieval-Augmented Generation system with advanced search, 3-t
 - 350+ tokens/sec with Groq fallback
 - $0/month cost
 
+## Live Demo
+
+**🌐 Try it now:**
+- **API:** https://enterprise-rag-api.onrender.com
+- **Docs:** https://enterprise-rag-api.onrender.com/docs
+- **Frontend:** Coming soon (deploying to Vercel)
+
+**Note:** Render free tier may sleep after 15min inactivity (first request takes ~30s to wake up)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
