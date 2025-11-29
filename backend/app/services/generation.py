@@ -39,20 +39,34 @@ class GenerationService:
         """Initialize all LLMs"""
         import os
         print(f"[i] Loading LLM providers...")
+        print(f"[DEBUG] RENDER env var: {os.getenv('RENDER')}")
+        print(f"[DEBUG] GROQ_API_KEY set: {bool(settings.groq_api_key)}")
 
         is_render = os.getenv("RENDER") == "true"
 
         if is_render:
             # On Render: Use Groq as primary (no local Ollama)
-            print("[i] Render deployment - using Groq as primary")
+            print("[i] Render deployment detected - using Groq as primary")
             self.ollama = None  # Not available on Render
-            self.groq = ChatGroq(
-                api_key=settings.groq_api_key,
-                model="llama3-70b-8192",
-                temperature=0.1
-            ) if settings.groq_api_key else None
+
+            if settings.groq_api_key:
+                try:
+                    print("[i] Initializing ChatGroq...")
+                    self.groq = ChatGroq(
+                        api_key=settings.groq_api_key,
+                        model="llama3-70b-8192",
+                        temperature=0.1
+                    )
+                    print("[OK] ChatGroq initialized successfully!")
+                except Exception as e:
+                    print(f"[ERROR] ChatGroq initialization failed: {e}")
+                    self.groq = None
+            else:
+                print("[ERROR] GROQ_API_KEY not found in settings!")
+                self.groq = None
         else:
             # Local dev: Ollama primary, Groq fallback
+            print("[i] Local development - using Ollama as primary")
             self.ollama = OllamaLLM(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
@@ -65,12 +79,9 @@ class GenerationService:
                 temperature=0.1
             ) if settings.groq_api_key else None
 
-        print(f"[OK] LLMs ready!")
-        if is_render:
-            print(f"  - Groq: {settings.ollama_model} (primary - Render deployment)")
-        else:
-            print(f"  - Ollama: {settings.ollama_model} (primary)")
-            print(f"  - Groq: {'Configured' if self.groq else 'Not available'}")
+        print(f"[OK] LLM initialization complete!")
+        print(f"[DEBUG] self.ollama = {self.ollama}")
+        print(f"[DEBUG] self.groq = {self.groq}")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
