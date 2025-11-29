@@ -111,13 +111,17 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # Use Render's PORT env var, default to 8001 for local
+    port = int(os.getenv("PORT", 8001))
 
     print("Starting FastAPI server...")
-    print("Visit: http://localhost:8001/docs for interactive API documentation")
+    print(f"Visit: http://localhost:{port}/docs for interactive API documentation")
 
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8001,
+        port=port,
         reload=True  # Auto-reload on code changes
     )
