@@ -12,7 +12,6 @@ These techniques improve retrieval accuracy beyond basic similarity search.
 from typing import List, Dict, Any, Tuple
 from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
-from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.services.vector_store import vector_store
@@ -22,8 +21,10 @@ import os
 # Only import CrossEncoder if not on Render (memory constrained)
 if not os.getenv("RENDER"):
     from sentence_transformers import CrossEncoder
+    from langchain_ollama import OllamaLLM
     CROSS_ENCODER_AVAILABLE = True
 else:
+    from langchain_groq import ChatGroq
     CROSS_ENCODER_AVAILABLE = False
     print("[i] Cross-encoder disabled (Render memory limit)")
 
@@ -40,7 +41,22 @@ class AdvancedRetrieval:
 
     def __init__(self):
         self.vector_store = vector_store
-        self.llm = OllamaLLM(model=settings.ollama_model, temperature=0.1)
+
+        # Use appropriate LLM based on environment
+        if os.getenv("RENDER"):
+            # Render: Use Groq
+            if settings.groq_api_key:
+                self.llm = ChatGroq(
+                    api_key=settings.groq_api_key,
+                    model="llama3-70b-8192",
+                    temperature=0.1
+                )
+            else:
+                self.llm = None
+        else:
+            # Local: Use Ollama
+            self.llm = OllamaLLM(model=settings.ollama_model, temperature=0.1)
+
         self._cross_encoder = None  # Lazy load (only when reranking is used)
 
     def _get_cross_encoder(self):
