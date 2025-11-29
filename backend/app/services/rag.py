@@ -84,6 +84,26 @@ class RAGService:
         print(f"\n[i] Processing query: '{question}'")
         print("-" * 70)
 
+        # Prepare cache options
+        cache_options = {
+            "k": k or 3,
+            "use_hybrid_search": use_hybrid_search,
+            "use_reranking": use_reranking
+        }
+
+        # Check cache first
+        cached_result = cache_service.get(question, cache_options)
+        if cached_result:
+            print("[OK] Returning cached result!")
+            return RAGResponse(
+                answer=cached_result["answer"],
+                query=question,
+                sources=cached_result["sources"],
+                num_sources=len(cached_result["sources"]),
+                model_used=cached_result["model_used"],
+                retrieval_scores=cached_result.get("retrieval_scores", [])
+            )
+
         # Step 0: Optimize query if requested
         search_query = question
         if optimize_query:
@@ -95,19 +115,19 @@ class RAGService:
         print(f"[1/{4 if optimize_query else 3}] Retrieving relevant documents...")
 
         if use_hybrid_search:
-            # Use hybrid search (vector + BM25)
-            documents = self.advanced.hybrid_search(search_query, k=k)
+            # Use hybrid search (vector + BM25) with scores
+            documents, scores = self.advanced.hybrid_search(search_query, k=k, with_scores=True)
             retrieval_result = type('obj', (object,), {
                 'documents': documents,
                 'num_results': len(documents),
-                'scores': []
+                'scores': scores  # Now we have hybrid scores!
             })()
         else:
-            # Use basic vector search
+            # Use basic vector search (always get scores for caching!)
             retrieval_result = self.retrieval.retrieve(
                 search_query,
                 k=k,
-                with_scores=include_scores
+                with_scores=True  # Always get scores for accurate caching
             )
 
         print(f"[OK] Retrieved {retrieval_result.num_results} documents")
@@ -172,11 +192,12 @@ class RAGService:
             retrieval_scores=final_scores
         )
 
-        # Cache the result for future queries
+        # Cache the result for future queries (include retrieval scores!)
         cache_service.set(question, {
             "answer": response.answer,
             "sources": sources,
-            "model_used": response.model_used
+            "model_used": response.model_used,
+            "retrieval_scores": final_scores
         }, cache_options)
 
         return response

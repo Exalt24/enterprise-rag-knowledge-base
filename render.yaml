@@ -1,0 +1,38 @@
+# Render.com Deployment Configuration
+# Free tier: 750 hours/month, perfect for demos!
+#
+# Deploy:
+# 1. Connect GitHub repo to Render
+# 2. Render auto-detects this file
+# 3. Set environment variables in Render dashboard
+# 4. Deploy!
+
+services:
+  # Backend API
+  - type: web
+    name: enterprise-rag-api
+    runtime: python
+    plan: free
+    region: singapore  # Closest to you!
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python -m app.main
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: OLLAMA_BASE_URL
+        value: https://api.groq.com/openai/v1  # Use Groq instead of local Ollama
+      - key: OLLAMA_MODEL
+        value: llama3-70b-8192  # Groq's Llama 3 model
+      - key: GROQ_API_KEY
+        sync: false  # Set in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false  # Set in Render dashboard
+      - key: REDIS_URL
+        sync: false  # Your Redis Cloud URL
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/render/project/src/backend/data/chroma
+    disk:
+      name: chroma-data
+      mountPath: /opt/render/project/src/backend/data
+      sizeGB: 1  # Free tier: 1GB persistent disk

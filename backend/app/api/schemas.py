@@ -95,6 +95,7 @@ class StatsResponse(BaseModel):
     embedding_model: str = Field(..., description="Embedding model name")
     embedding_dimension: int = Field(..., description="Vector dimension")
     llm_model: str = Field(..., description="LLM model name")
+    cache_stats: Optional[dict] = Field(None, description="Cache statistics (hits, misses, type)")
 
 
 # =============================================================================
