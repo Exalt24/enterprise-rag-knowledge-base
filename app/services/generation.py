@@ -1,56 +1,76 @@
 """
-Generation Service
+Generation Service with LLM Fallback
 
-Handles LLM generation with retrieved context.
+3-Tier LLM Strategy:
+1. Ollama (local, unlimited) - Primary
+2. Groq (350+ tokens/sec, free tier) - Fallback for speed
+3. Gemini (generous free tier) - Final fallback
 
-Uses Llama 3 via Ollama (local, unlimited usage).
-Fallback options: Groq API, Gemini API (if needed later).
-
-This is the "G" in RAG - generating answers from context!
+Benefits:
+- Speed: Groq is 10-30x faster than local Ollama for demos
+- Reliability: Fallback if Ollama is down
+- Production pattern: Multi-provider resilience
 """
 
 from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
 
 
 class GenerationResponse(BaseModel):
-    """
-    Structured generation response with Pydantic validation.
-
-    Benefits:
-    - Type-safe response handling
-    - Easy to extend (add confidence, metadata, etc.)
-    - Clear contract for API responses
-    """
+    """Structured generation response with Pydantic validation"""
     answer: str = Field(..., description="Generated answer")
     query: str = Field(..., description="Original user query")
-    model_used: str = Field(..., description="LLM model name")
+    model_used: str = Field(..., description="LLM model name (ollama/groq/gemini)")
     context_length: int = Field(..., description="Length of context provided to LLM")
 
 
 class GenerationService:
     """
-    Generates answers using LLM with retrieved context.
+    Generates answers using LLM with 3-tier fallback.
 
-    Current: Llama 3 via Ollama
-    Future: Add Groq/Gemini fallback for speed demos
+    Priority: Ollama (local) → Groq (fast) → Gemini (reliable)
     """
 
     def __init__(self):
-        """Initialize Llama 3 LLM"""
-        print(f"[i] Loading LLM: {settings.ollama_model}")
+        """Initialize all LLMs"""
+        print(f"[i] Loading LLM providers...")
 
-        self.llm = OllamaLLM(
+        # Primary: Ollama (local, unlimited)
+        self.ollama = OllamaLLM(
             base_url=settings.ollama_base_url,
             model=settings.ollama_model,
-            temperature=0.1,  # Low temperature = more focused, less creative
+            temperature=0.1,
+            timeout=30  # Timeout if Ollama is slow/down
         )
 
-        print(f"[OK] LLM ready!")
+        # Fallback 1: Groq (350+ tokens/sec, free tier)
+        self.groq = None
+        if settings.groq_api_key:
+            self.groq = ChatGroq(
+                api_key=settings.groq_api_key,
+                model="llama3-70b-8192",  # Fast, large context
+                temperature=0.1
+            )
+
+        # Fallback 2: Gemini (generous free tier)
+        self.gemini = None
+        if settings.gemini_api_key:
+            self.gemini = ChatGoogleGenerativeAI(
+                google_api_key=settings.gemini_api_key,
+                model="gemini-pro",
+                temperature=0.1
+            )
+
+        print(f"[OK] LLMs ready!")
+        print(f"  - Ollama: {settings.ollama_model} (primary)")
+        print(f"  - Groq: {'Configured' if self.groq else 'Not available'}")
+        print(f"  - Gemini: {'Configured' if self.gemini else 'Not available'}")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
@@ -69,12 +89,30 @@ Question: {question}
 
 Answer:""")
 
-        # Create generation chain
-        self.chain = (
-            self.prompt_template
-            | self.llm
-            | StrOutputParser()
-        )
+    def _generate_with_llm(self, llm, llm_name: str, query: str, context: str) -> Optional[GenerationResponse]:
+        """
+        Try to generate answer with specific LLM.
+
+        Returns GenerationResponse or None if failed.
+        """
+        try:
+            chain = self.prompt_template | llm | StrOutputParser()
+
+            answer = chain.invoke({
+                "context": context,
+                "question": query
+            })
+
+            return GenerationResponse(
+                answer=answer.strip(),
+                query=query,
+                model_used=llm_name,
+                context_length=len(context)
+            )
+
+        except Exception as e:
+            print(f"[!] {llm_name} failed: {e}")
+            return None
 
     def generate(
         self,
@@ -82,7 +120,9 @@ Answer:""")
         context: str
     ) -> GenerationResponse:
         """
-        Generate answer based on query and retrieved context.
+        Generate answer with 3-tier LLM fallback.
+
+        Tries: Ollama → Groq → Gemini
 
         Args:
             query: User question
@@ -92,16 +132,48 @@ Answer:""")
             GenerationResponse with answer and metadata
         """
 
-        # Generate answer using LLM
-        answer = self.chain.invoke({
-            "context": context,
-            "question": query
-        })
+        # TIER 1: Try Ollama (local, unlimited)
+        response = self._generate_with_llm(
+            self.ollama,
+            f"ollama/{settings.ollama_model}",
+            query,
+            context
+        )
 
+        if response:
+            return response
+
+        # TIER 2: Try Groq (fast, free tier)
+        if self.groq:
+            print("[i] Ollama unavailable, trying Groq...")
+            response = self._generate_with_llm(
+                self.groq,
+                "groq/llama3-70b",
+                query,
+                context
+            )
+
+            if response:
+                return response
+
+        # TIER 3: Try Gemini (generous free tier)
+        if self.gemini:
+            print("[i] Groq unavailable, trying Gemini...")
+            response = self._generate_with_llm(
+                self.gemini,
+                "gemini/gemini-pro",
+                query,
+                context
+            )
+
+            if response:
+                return response
+
+        # All failed - return error
         return GenerationResponse(
-            answer=answer.strip(),
+            answer="[X] All LLM providers unavailable. Please check your configuration.",
             query=query,
-            model_used=settings.ollama_model,
+            model_used="none",
             context_length=len(context)
         )
 
@@ -111,31 +183,24 @@ generation_service = GenerationService()
 
 
 # =============================================================================
-# Test Generation
+# Test Generation with Fallback
 # =============================================================================
 if __name__ == "__main__":
     print("=" * 70)
-    print("Generation Service Test")
+    print("Generation Service Test (with Fallback)")
     print("=" * 70)
 
-    # Sample context (simulates retrieved documents)
     sample_context = """
-[Source 1: rag_guide.txt]
-RAG stands for Retrieval-Augmented Generation. It combines retrieval systems with large language models to provide accurate, context-aware responses.
+[Source 1: resume.pdf]
+Daniel Alexis Cruz is a Full-Stack Developer specializing in AI, Blockchain & Cybersecurity. He has experience with React, Node.js, Python, and Solidity.
 
-[Source 2: architecture.txt]
-The RAG system uses Llama 3 for generation, Sentence Transformers for embeddings, and Chroma for vector storage. It achieves sub-2 second query latency.
-
-[Source 3: benefits.txt]
-Benefits of RAG include: accurate answers grounded in documents, no hallucinations, up-to-date information, and cost-effectiveness compared to fine-tuning.
+[Source 2: projects.txt]
+Notable projects include AutoFlow Pro (browser automation with BullMQ and Redis) and an NFT Trading Platform (Solidity smart contracts).
 """
 
-    # Test queries
     test_queries = [
-        "What does RAG stand for?",
-        "What LLM is used in this system?",
-        "What are the benefits of RAG?",
-        "What is the capital of France?",  # NOT in context - should say "I don't have that information"
+        "What technologies does Daniel work with?",
+        "Tell me about AutoFlow Pro",
     ]
 
     for query in test_queries:
@@ -151,10 +216,9 @@ Benefits of RAG include: accurate answers grounded in documents, no hallucinatio
         print(f"  Context length: {response.context_length} chars")
 
     print("\n" + "=" * 70)
-    print("[OK] Generation working!")
+    print("[OK] Generation with fallback working!")
     print("=" * 70)
-    print("\nKey Learnings:")
-    print("  - LLM generates answers from provided context")
-    print("  - Temperature 0.1 = focused, factual answers")
-    print("  - Prompt engineering guides LLM behavior")
-    print("  - LLM should admit when answer not in context")
+    print("\nFallback Strategy:")
+    print("  1. Ollama (local, unlimited) - Primary")
+    print("  2. Groq (350+ tokens/sec) - Speed fallback")
+    print("  3. Gemini (generous free) - Final fallback")

@@ -4,7 +4,7 @@ Advanced Retrieval Techniques
 Implements:
 1. Hybrid Search (Vector + BM25 keyword search)
 2. Query Optimization (rewriting, expansion)
-3. Reranking (future)
+3. Reranking with Cross-Encoder
 
 These techniques improve retrieval accuracy beyond basic similarity search.
 """
@@ -39,15 +39,12 @@ class AdvancedRetrieval:
         """Lazy load cross-encoder model (only when needed)"""
         if self._cross_encoder is None:
             print("[i] Loading cross-encoder for reranking...")
-            self._cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+            self._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
             print("[OK] Cross-encoder ready!")
         return self._cross_encoder
 
     def hybrid_search(
-        self,
-        query: str,
-        k: int = None,
-        vector_weight: float = 0.7
+        self, query: str, k: int = None, vector_weight: float = 0.7
     ) -> List[Document]:
         """
         Hybrid search combining vector similarity and BM25 keyword search.
@@ -66,15 +63,16 @@ class AdvancedRetrieval:
         # Simplified hybrid: Combine vector + BM25 results manually
         try:
             # Get vector search results (semantic)
-            vector_results = self.vector_store.search(query, k=k * 2)  # Get more for diversity
+            vector_results = self.vector_store.search(
+                query, k=k * 2
+            )  # Get more for diversity
 
             # Get all documents for BM25
             all_docs_result = self.vector_store._vectorstore.get()
             all_docs = [
                 Document(page_content=content, metadata=metadata)
                 for content, metadata in zip(
-                    all_docs_result['documents'],
-                    all_docs_result['metadatas']
+                    all_docs_result["documents"], all_docs_result["metadatas"]
                 )
             ]
 
@@ -113,7 +111,8 @@ class AdvancedRetrieval:
         Output: "What is the current weather? temperature conditions forecast"
         """
 
-        prompt = ChatPromptTemplate.from_template("""
+        prompt = ChatPromptTemplate.from_template(
+            """
 You are a query optimization assistant.
 
 Given a user query, rewrite it to be more specific and add related search terms.
@@ -126,7 +125,8 @@ Rules:
 
 Original query: {query}
 
-Optimized query:""")
+Optimized query:"""
+        )
 
         chain = prompt | self.llm | StrOutputParser()
 
@@ -138,10 +138,7 @@ Optimized query:""")
             return query
 
     def rerank(
-        self,
-        query: str,
-        documents: List[Document],
-        top_k: int = None
+        self, query: str, documents: List[Document], top_k: int = None
     ) -> List[Tuple[Document, float]]:
         """
         Rerank documents using cross-encoder for better relevance scoring.
@@ -197,6 +194,7 @@ advanced_retrieval = AdvancedRetrieval()
 if __name__ == "__main__":
     import sys
     from pathlib import Path
+
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
     from app.services.vector_store import vector_store
@@ -209,7 +207,7 @@ if __name__ == "__main__":
     stats = vector_store.get_stats()
     print(f"\nDatabase: {stats['total_documents']} documents")
 
-    if stats['total_documents'] == 0:
+    if stats["total_documents"] == 0:
         print("\n[!] No documents in database. Run test_ingestion.py first")
         sys.exit(1)
 
@@ -217,11 +215,7 @@ if __name__ == "__main__":
     print("\n[1] Query Optimization:")
     print("-" * 70)
 
-    test_queries = [
-        "weather",
-        "RAG",
-        "embedding model"
-    ]
+    test_queries = ["weather", "RAG", "embedding model"]
 
     for q in test_queries:
         optimized = advanced_retrieval.optimize_query(q)
