@@ -36,6 +36,18 @@ class QueryRequest(BaseModel):
         default=True,
         description="Include source documents in response"
     )
+    use_hybrid_search: bool = Field(
+        default=True,
+        description="Use hybrid search (vector + BM25 keyword) for better accuracy"
+    )
+    optimize_query: bool = Field(
+        default=False,
+        description="Optimize query with LLM before retrieval (improves vague queries)"
+    )
+    use_reranking: bool = Field(
+        default=False,
+        description="Rerank results with cross-encoder (most accurate, slower)"
+    )
 
 
 class Source(BaseModel):
