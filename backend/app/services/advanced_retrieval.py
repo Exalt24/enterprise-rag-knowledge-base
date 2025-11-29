@@ -48,7 +48,7 @@ class AdvancedRetrieval:
             if settings.groq_api_key:
                 self.llm = ChatGroq(
                     api_key=settings.groq_api_key,
-                    model="llama-3.1-70b-versatile",  # Current Groq model
+                    model="llama-3.3-70b-versatile",  # Groq Llama 3.3 70B
                     temperature=0.1
                 )
             else:
