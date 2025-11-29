@@ -44,7 +44,7 @@ Review entire codebase for:
 
 ---
 
-### 3. Update Portfolio Materials (2-3 hours)
+### 2. Update Portfolio Materials (2-3 hours)
 **Priority: High - Add to resume, LinkedIn, GitHub**
 
 #### Resume (DAC/ats-resume.html)
@@ -72,7 +72,7 @@ Add to Featured Projects with metrics.
 
 ---
 
-### 4. Optional Enhancements (If Time Permits)
+### 3. Optional Enhancements (If Time Permits)
 
 #### Demo Video (1-2 hours)
 Record 5-minute walkthrough showing:
@@ -83,11 +83,15 @@ Record 5-minute walkthrough showing:
 5. Show stats dashboard
 
 #### Production Improvements (Optional)
-- Add authentication (JWT tokens)
-- Add document management UI (list, delete documents)
-- Add conversation history persistence
-- Add more evaluation metrics
-- Improve error messages in frontend
+**Already implemented:**
+- ✅ Document management UI (FileList.tsx with list + delete)
+- ✅ Conversation history persistence (conversation.py service with Redis)
+- ✅ Comprehensive evaluation metrics (test_rag_evaluation.py with 19 queries)
+- ✅ Good error messages in frontend (try/catch with user-friendly messages)
+
+**Not implemented (low priority):**
+- ❌ Authentication (JWT tokens) - Not critical for portfolio demo
+- ❌ Document upload progress bar - Works but could be enhanced
 
 ---
 
