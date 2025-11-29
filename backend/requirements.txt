@@ -1,32 +1,30 @@
 # Core Framework
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-multipart
+fastapi==0.115.0
+uvicorn[standard]==0.32.1
+pydantic==2.9.2
+pydantic-settings==2.6.1
+python-multipart==0.0.12
 
-# LangChain & RAG (Modern Packages - No Deprecations)
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community
-langchain-ollama
-langchain-huggingface
-langchain-groq
-langchain-google-genai>=2.0.0  # For Gemini API (embeddings + LLM)
-google-generativeai
+# LangChain & RAG - Compatible versions (tested together)
+langchain==0.3.7
+langchain-core==0.3.15
+langchain-community==0.3.7
+langchain-ollama==0.2.0
+langchain-huggingface==0.1.2
+langchain-groq==0.2.1
 
 # Vector Database & Embeddings
-chromadb
-langchain-chroma
-sentence-transformers
-rank_bm25
+chromadb==0.5.20
+langchain-chroma==0.1.4
+sentence-transformers==3.3.1
+rank-bm25==0.2.2
 
 # Document Processing
-pypdf
-python-docx
+pypdf==5.1.0
+python-docx==1.1.2
 
 # Utilities
-python-dotenv
+python-dotenv==1.0.1
 
 # Redis for caching
-redis
+redis==5.2.0

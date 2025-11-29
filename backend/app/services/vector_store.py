@@ -20,13 +20,7 @@ from typing import List, Optional, Dict, Any
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from app.core.config import settings
-import os
-
-# Use cloud embeddings on Render (512MB RAM limit), local otherwise
-if os.getenv("RENDER"):
-    from app.services.embeddings_cloud import embedding_service
-else:
-    from app.services.embeddings import embedding_service
+from app.services.embeddings import embedding_service
 
 
 class VectorStoreService:
