@@ -256,3 +256,82 @@ async def health_check():
             vector_db_connected=False,
             total_documents=0
         )
+
+
+# =============================================================================
+# File Management Endpoints
+# =============================================================================
+
+from app.services.file_management import file_management
+from app.api.schemas import (
+    DocumentInfoSchema,
+    ListDocumentsResponse,
+    DeleteDocumentResponse
+)
+
+
+@router.get("/documents", response_model=ListDocumentsResponse)
+async def list_documents():
+    """
+    List all uploaded documents with metadata.
+
+    Returns:
+    - File names, types, sizes
+    - Upload dates
+    - Chunk counts per document
+    """
+    try:
+        docs = file_management.list_documents()
+
+        total_chunks = docs[0].total_chunks if docs else 0
+
+        doc_schemas = [
+            DocumentInfoSchema(
+                file_name=doc.file_name,
+                file_type=doc.file_type,
+                file_size_kb=doc.file_size_kb,
+                upload_date=doc.upload_date,
+                chunk_count=doc.chunk_count
+            )
+            for doc in docs
+        ]
+
+        return ListDocumentsResponse(
+            documents=doc_schemas,
+            total_documents=len(doc_schemas),
+            total_chunks=total_chunks
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
+
+
+@router.delete("/documents/{file_name}", response_model=DeleteDocumentResponse)
+async def delete_document(file_name: str):
+    """
+    Delete a document from filesystem and vector database.
+
+    Args:
+        file_name: Name of file to delete
+
+    Returns:
+        Deletion status and chunks removed
+    """
+    try:
+        result = file_management.delete_document(file_name)
+
+        if result["success"]:
+            return DeleteDocumentResponse(
+                success=True,
+                message=f"Document {file_name} deleted successfully",
+                chunks_deleted=result.get("chunks_deleted", 0)
+            )
+        else:
+            return DeleteDocumentResponse(
+                success=False,
+                message="Deletion failed",
+                error=result.get("error", "Unknown error")
+            )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")
