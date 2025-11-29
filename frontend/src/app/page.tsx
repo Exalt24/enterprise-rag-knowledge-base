@@ -9,11 +9,11 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleDocumentUploaded = () => {
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <main className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-bold text-white mb-2">

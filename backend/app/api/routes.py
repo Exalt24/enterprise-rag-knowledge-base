@@ -20,6 +20,7 @@ from app.api.schemas import (
     Source
 )
 from app.services.rag import rag_service
+from app.services.conversation import conversation_service
 from app.services.ingestion import IngestionService
 from app.services.vector_store import vector_store
 from app.core.config import settings
@@ -47,7 +48,34 @@ async def query_knowledge_base(request: QueryRequest):
         {"question": "What is RAG?", "k": 3, "include_sources": true}
     """
     try:
-        # Query RAG system with advanced options
+        # Use conversation memory if conversation_id provided
+        if request.conversation_id:
+            # Conversation mode - uses LangGraph for memory
+            conv_result = conversation_service.query_with_memory(
+                request.question,
+                request.conversation_id
+            )
+            
+            # Build response from conversation result
+            sources = []
+            if request.include_sources:
+                for source_dict in conv_result['sources']:
+                    sources.append(Source(
+                        file_name=source_dict['file_name'],
+                        page=source_dict.get('page'),
+                        content_preview=source_dict['content_preview'],
+                        relevance_score=None
+                    ))
+            
+            return QueryResponse(
+                answer=conv_result['answer'],
+                query=request.question,
+                sources=sources,
+                num_sources=len(sources),
+                model_used="ollama/llama3"
+            )
+        
+        # Standard query (no memory)
         rag_response = rag_service.query(
             request.question,
             k=request.k,
