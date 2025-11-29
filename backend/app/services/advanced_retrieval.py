@@ -15,9 +15,17 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from sentence_transformers import CrossEncoder
 from app.services.vector_store import vector_store
 from app.core.config import settings
+import os
+
+# Only import CrossEncoder if not on Render (memory constrained)
+if not os.getenv("RENDER"):
+    from sentence_transformers import CrossEncoder
+    CROSS_ENCODER_AVAILABLE = True
+else:
+    CROSS_ENCODER_AVAILABLE = False
+    print("[i] Cross-encoder disabled (Render memory limit)")
 
 
 class AdvancedRetrieval:
@@ -37,6 +45,9 @@ class AdvancedRetrieval:
 
     def _get_cross_encoder(self):
         """Lazy load cross-encoder model (only when needed)"""
+        if not CROSS_ENCODER_AVAILABLE:
+            raise RuntimeError("Cross-encoder not available on Render (memory limit)")
+
         if self._cross_encoder is None:
             print("[i] Loading cross-encoder for reranking...")
             self._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
@@ -192,6 +203,12 @@ Optimized query:"""
         """
         if not documents:
             return []
+
+        # Skip reranking on Render (memory limit)
+        if not CROSS_ENCODER_AVAILABLE:
+            print("[i] Reranking skipped (not available on Render)")
+            # Return documents with uniform scores
+            return [(doc, 0.5) for doc in documents[:top_k or len(documents)]]
 
         # Get cross-encoder model (lazy load)
         cross_encoder = self._get_cross_encoder()

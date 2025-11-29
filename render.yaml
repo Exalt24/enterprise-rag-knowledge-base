@@ -20,6 +20,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.0
+      - key: RENDER
+        value: "true"  # Flag for memory-optimized mode
       - key: OLLAMA_BASE_URL
         value: https://api.groq.com/openai/v1  # Use Groq instead of local Ollama
       - key: OLLAMA_MODEL
@@ -27,7 +29,7 @@ services:
       - key: GROQ_API_KEY
         sync: false  # Set in Render dashboard
       - key: GEMINI_API_KEY
-        sync: false  # Set in Render dashboard
+        sync: false  # Set in Render dashboard (required for cloud embeddings)
       - key: REDIS_URL
         sync: false  # Your Redis Cloud URL
       - key: CHROMA_PERSIST_DIR
