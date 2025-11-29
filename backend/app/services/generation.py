@@ -37,28 +37,40 @@ class GenerationService:
 
     def __init__(self):
         """Initialize all LLMs"""
+        import os
         print(f"[i] Loading LLM providers...")
 
-        # Primary: Ollama (local, unlimited)
-        self.ollama = OllamaLLM(
-            base_url=settings.ollama_base_url,
-            model=settings.ollama_model,
-            temperature=0.1,
-            timeout=30  # Timeout if Ollama is slow/down
-        )
+        is_render = os.getenv("RENDER") == "true"
 
-        # Fallback 1: Groq (350+ tokens/sec, free tier)
-        self.groq = None
-        if settings.groq_api_key:
+        if is_render:
+            # On Render: Use Groq as primary (no local Ollama)
+            print("[i] Render deployment - using Groq as primary")
+            self.ollama = None  # Not available on Render
             self.groq = ChatGroq(
                 api_key=settings.groq_api_key,
-                model="llama3-70b-8192",  # Fast, large context
+                model="llama3-70b-8192",
                 temperature=0.1
+            ) if settings.groq_api_key else None
+        else:
+            # Local dev: Ollama primary, Groq fallback
+            self.ollama = OllamaLLM(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                temperature=0.1,
+                timeout=30
             )
+            self.groq = ChatGroq(
+                api_key=settings.groq_api_key,
+                model="llama3-70b-8192",
+                temperature=0.1
+            ) if settings.groq_api_key else None
 
         print(f"[OK] LLMs ready!")
-        print(f"  - Ollama: {settings.ollama_model} (primary)")
-        print(f"  - Groq: {'Configured' if self.groq else 'Not available'}")
+        if is_render:
+            print(f"  - Groq: {settings.ollama_model} (primary - Render deployment)")
+        else:
+            print(f"  - Ollama: {settings.ollama_model} (primary)")
+            print(f"  - Groq: {'Configured' if self.groq else 'Not available'}")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
@@ -120,23 +132,29 @@ Answer:""")
             GenerationResponse with answer and metadata
         """
 
-        # TIER 1: Try Ollama (local, unlimited)
-        response = self._generate_with_llm(
-            self.ollama,
-            f"ollama/{settings.ollama_model}",
-            query,
-            context
-        )
+        # TIER 1: Try Ollama (local) or Groq (Render)
+        if self.ollama:
+            # Local development - use Ollama
+            response = self._generate_with_llm(
+                self.ollama,
+                f"ollama/{settings.ollama_model}",
+                query,
+                context
+            )
+            if response:
+                return response
 
-        if response:
-            return response
-
-        # TIER 2: Try Groq (fast, free tier)
+        # TIER 2: Try Groq (fallback for local, primary for Render)
         if self.groq:
-            print("[i] Ollama unavailable, trying Groq...")
+            if not self.ollama:
+                # Groq is primary on Render
+                pass
+            else:
+                print("[i] Ollama unavailable, trying Groq...")
+
             response = self._generate_with_llm(
                 self.groq,
-                "groq/llama3-70b",
+                f"groq/{settings.ollama_model}",
                 query,
                 context
             )
