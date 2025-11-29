@@ -28,7 +28,7 @@ services:
         value: llama3-70b-8192  # Groq's Llama 3 model
       - key: GROQ_API_KEY
         sync: false  # Set in Render dashboard
-      - key: GEMINI_API_KEY
+      - key: HUGGINGFACEHUB_API_TOKEN
         sync: false  # Set in Render dashboard (required for cloud embeddings)
       - key: REDIS_URL
         sync: false  # Your Redis Cloud URL
