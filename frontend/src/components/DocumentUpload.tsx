@@ -18,7 +18,9 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
 
     // Validate file type
     const allowedTypes = [".pdf", ".docx", ".txt", ".md"];
-    const fileExt = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    const fileExt = file.name
+      .substring(file.name.lastIndexOf("."))
+      .toLowerCase();
 
     if (!allowedTypes.includes(fileExt)) {
       setMessage(`Unsupported file type. Allowed: ${allowedTypes.join(", ")}`);
@@ -43,7 +45,9 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
         setMessage(`✗ Upload failed: ${result.message}`);
       }
     } catch (error) {
-      setMessage(`✗ Error: ${error instanceof Error ? error.message : "Upload failed"}`);
+      setMessage(
+        `✗ Error: ${error instanceof Error ? error.message : "Upload failed"}`
+      );
     } finally {
       setUploading(false);
     }
@@ -51,7 +55,9 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
 
   return (
     <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700">
-      <h2 className="text-xl font-semibold text-white mb-4">Upload Documents</h2>
+      <h2 className="text-xl font-semibold text-white mb-4">
+        Upload Documents
+      </h2>
 
       <div className="space-y-4">
         <div
@@ -59,6 +65,7 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
           onClick={() => fileInputRef.current?.click()}
         >
           <input
+            title="Upload Document"
             ref={fileInputRef}
             type="file"
             accept=".pdf,.docx,.txt,.md"

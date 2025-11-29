@@ -48,6 +48,10 @@ class QueryRequest(BaseModel):
         default=False,
         description="Rerank results with cross-encoder (most accurate, slower)"
     )
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Conversation ID for multi-turn chat with memory"
+    )
 
 
 class Source(BaseModel):
