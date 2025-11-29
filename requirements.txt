@@ -15,6 +15,7 @@ langchain-huggingface
 chromadb
 langchain-chroma
 sentence-transformers
+rank_bm25
 
 # Document Processing
 pypdf

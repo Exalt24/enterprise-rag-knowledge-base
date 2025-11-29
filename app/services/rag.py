@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from langchain_core.documents import Document
 from app.services.retrieval import retrieval_service, RetrievalResult
 from app.services.generation import generation_service, GenerationResponse
+from app.services.advanced_retrieval import advanced_retrieval
 
 
 class RAGResponse(BaseModel):
@@ -53,20 +54,25 @@ class RAGService:
     def __init__(self):
         self.retrieval = retrieval_service
         self.generation = generation_service
+        self.advanced = advanced_retrieval
 
     def query(
         self,
         question: str,
         k: int = None,
-        include_scores: bool = False
+        include_scores: bool = False,
+        use_hybrid_search: bool = True,
+        optimize_query: bool = False
     ) -> RAGResponse:
         """
-        Answer a question using RAG.
+        Answer a question using RAG with advanced retrieval options.
 
         Args:
             question: User question
             k: Number of documents to retrieve
             include_scores: Include similarity scores in response
+            use_hybrid_search: Use hybrid (vector + BM25) vs basic vector search
+            optimize_query: Optimize query before retrieval (improves vague queries)
 
         Returns:
             RAGResponse with answer and sources
@@ -75,13 +81,31 @@ class RAGService:
         print(f"\n[i] Processing query: '{question}'")
         print("-" * 70)
 
+        # Step 0: Optimize query if requested
+        search_query = question
+        if optimize_query:
+            print("[0/4] Optimizing query...")
+            search_query = self.advanced.optimize_query(question)
+            print(f"[OK] Optimized: '{search_query}'")
+
         # Step 1: Retrieve relevant documents
-        print("[1/3] Retrieving relevant documents...")
-        retrieval_result = self.retrieval.retrieve(
-            question,
-            k=k,
-            with_scores=include_scores
-        )
+        print(f"[1/{4 if optimize_query else 3}] Retrieving relevant documents...")
+
+        if use_hybrid_search:
+            # Use hybrid search (vector + BM25)
+            documents = self.advanced.hybrid_search(search_query, k=k)
+            retrieval_result = type('obj', (object,), {
+                'documents': documents,
+                'num_results': len(documents),
+                'scores': []
+            })()
+        else:
+            # Use basic vector search
+            retrieval_result = self.retrieval.retrieve(
+                search_query,
+                k=k,
+                with_scores=include_scores
+            )
 
         print(f"[OK] Retrieved {retrieval_result.num_results} documents")
 
@@ -97,12 +121,15 @@ class RAGService:
             )
 
         # Step 2: Format context for LLM
-        print("[2/3] Formatting context...")
+        step_num = 2 if not optimize_query else 2
+        total_steps = 3 if not optimize_query else 4
+        print(f"[{step_num}/{total_steps}] Formatting context...")
         context = self.retrieval.format_context(retrieval_result.documents)
         print(f"[OK] Context length: {len(context)} chars")
 
         # Step 3: Generate answer
-        print("[3/3] Generating answer...")
+        step_num += 1
+        print(f"[{step_num}/{total_steps}] Generating answer...")
         gen_response = self.generation.generate(question, context)
         print(f"[OK] Generated answer ({len(gen_response.answer)} chars)")
 
