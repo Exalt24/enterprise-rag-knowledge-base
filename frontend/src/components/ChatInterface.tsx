@@ -189,7 +189,7 @@ export function ChatInterface() {
                       >
                         <div className="flex justify-between items-start">
                           <span className="font-medium">{source.file_name}</span>
-                          {source.relevance_score !== undefined && (
+                          {source.relevance_score !== undefined && source.relevance_score !== null && (
                             <span className="text-slate-500 ml-2">
                               {source.relevance_score.toFixed(3)}
                             </span>
