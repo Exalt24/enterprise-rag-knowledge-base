@@ -2,6 +2,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 python-multipart
 
 # LangChain & RAG (Modern Packages - No Deprecations)
@@ -12,6 +13,7 @@ langchain-huggingface
 
 # Vector Database & Embeddings
 chromadb
+langchain-chroma
 sentence-transformers
 
 # Document Processing
