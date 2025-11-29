@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { ChatInterface } from "@/components/ChatInterface";
 import { Stats } from "@/components/Stats";
+import { FileList } from "@/components/FileList";
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -27,8 +28,9 @@ export default function Home() {
         <Stats key={refreshKey} />
 
         <div className="grid md:grid-cols-3 gap-6 mt-8">
-          <div className="md:col-span-1">
+          <div className="md:col-span-1 space-y-6">
             <DocumentUpload onUploadSuccess={handleDocumentUploaded} />
+            <FileList refreshKey={refreshKey} />
           </div>
 
           <div className="md:col-span-2">

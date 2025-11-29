@@ -107,3 +107,30 @@ class HealthResponse(BaseModel):
     ollama_connected: bool = Field(..., description="Ollama connection status")
     vector_db_connected: bool = Field(..., description="Vector DB connection status")
     total_documents: int = Field(..., description="Documents in database")
+
+# =============================================================================
+# File Management Endpoint Schemas
+# =============================================================================
+
+class DocumentInfoSchema(BaseModel):
+    """Schema for document information"""
+    file_name: str = Field(..., description="Document filename")
+    file_type: str = Field(..., description="File extension")
+    file_size_kb: float = Field(..., description="File size in KB")
+    upload_date: str = Field(..., description="Upload timestamp")
+    chunk_count: int = Field(..., description="Number of chunks in vector DB")
+
+
+class ListDocumentsResponse(BaseModel):
+    """Response schema for /documents endpoint"""
+    documents: List[DocumentInfoSchema] = Field(..., description="List of documents")
+    total_documents: int = Field(..., description="Total document count")
+    total_chunks: int = Field(..., description="Total chunks across all documents")
+
+
+class DeleteDocumentResponse(BaseModel):
+    """Response schema for /documents/{file_name} DELETE endpoint"""
+    success: bool = Field(..., description="Whether deletion succeeded")
+    message: str = Field(..., description="Status message")
+    chunks_deleted: Optional[int] = Field(None, description="Number of chunks removed")
+    error: Optional[str] = Field(None, description="Error message if failed")
