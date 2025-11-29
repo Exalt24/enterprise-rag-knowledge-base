@@ -78,18 +78,43 @@ export function ChatInterface() {
     window.location.reload();
   };
 
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleExport = () => {
+    const exportData = messages.map(m => `${m.type.toUpperCase()}: ${m.content}`).join('
+
+');
+    const blob = new Blob([exportData], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-export-${Date.now()}.txt`;
+    a.click();
+  };
+
   return (
     <div className="bg-slate-800/50 rounded-lg border border-slate-700 flex flex-col h-[600px]">
       <div className="p-4 border-b border-slate-700">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-xl font-semibold text-white">Ask Questions</h2>
 
-          <button
-            onClick={handleClearChat}
-            className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1 rounded hover:bg-slate-700"
-          >
-            New Chat
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExport}
+              disabled={messages.length === 0}
+              className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1 rounded hover:bg-slate-700 disabled:opacity-50"
+            >
+              Export
+            </button>
+            <button
+              onClick={handleClearChat}
+              className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1 rounded hover:bg-slate-700"
+            >
+              New Chat
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-4 text-sm">
@@ -141,8 +166,17 @@ export function ChatInterface() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="bg-slate-700/50 text-slate-100 rounded-lg px-4 py-3 max-w-[90%]">
+                <div className="bg-slate-700/50 text-slate-100 rounded-lg px-4 py-3 max-w-[90%] relative group">
                   {message.content}
+                  <button
+                    onClick={() => handleCopy(message.content)}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-white p-1 rounded hover:bg-slate-600"
+                    title="Copy answer"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
                 </div>
 
                 {message.sources && message.sources.length > 0 && (
