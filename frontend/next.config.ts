@@ -6,15 +6,6 @@ const nextConfig: NextConfig = {
 
   // Disable telemetry
   reactStrictMode: true,
-
-  // Fix Turbopack path resolution for Vercel monorepo
-  experimental: {
-    turbo: {
-      resolveAlias: {
-        '@': './src',
-      },
-    },
-  },
 };
 
 export default nextConfig;
