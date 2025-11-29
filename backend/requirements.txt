@@ -11,7 +11,8 @@ langchain-community
 langchain-ollama
 langchain-huggingface
 langchain-groq
-langchain-google-genai
+langchain-google-genai  # For Gemini API (embeddings + LLM)
+google-generativeai  # Required for Gemini
 
 # Vector Database & Embeddings
 chromadb
