@@ -62,7 +62,8 @@ class RAGService:
         k: int = None,
         include_scores: bool = False,
         use_hybrid_search: bool = True,
-        optimize_query: bool = False
+        optimize_query: bool = False,
+        use_reranking: bool = False
     ) -> RAGResponse:
         """
         Answer a question using RAG with advanced retrieval options.
@@ -73,6 +74,7 @@ class RAGService:
             include_scores: Include similarity scores in response
             use_hybrid_search: Use hybrid (vector + BM25) vs basic vector search
             optimize_query: Optimize query before retrieval (improves vague queries)
+            use_reranking: Rerank results with cross-encoder (most accurate, slower)
 
         Returns:
             RAGResponse with answer and sources
@@ -120,11 +122,26 @@ class RAGService:
                 retrieval_scores=[]
             )
 
+        # Step 1.5: Reranking (optional)
+        final_documents = retrieval_result.documents
+        rerank_scores = []
+
+        if use_reranking:
+            step_num = 2 if not optimize_query else 2
+            total_steps = 4 if not optimize_query and not use_reranking else 5
+            print(f"[{step_num}/{total_steps}] Reranking with cross-encoder...")
+
+            reranked = self.advanced.rerank(search_query, retrieval_result.documents, top_k=k)
+            final_documents = [doc for doc, score in reranked]
+            rerank_scores = [float(score) for doc, score in reranked]
+            step_num += 1
+        else:
+            step_num = 2 if not optimize_query else 2
+            total_steps = 3 if not optimize_query else 4
+
         # Step 2: Format context for LLM
-        step_num = 2 if not optimize_query else 2
-        total_steps = 3 if not optimize_query else 4
         print(f"[{step_num}/{total_steps}] Formatting context...")
-        context = self.retrieval.format_context(retrieval_result.documents)
+        context = self.retrieval.format_context(final_documents)
         print(f"[OK] Context length: {len(context)} chars")
 
         # Step 3: Generate answer
@@ -135,12 +152,15 @@ class RAGService:
 
         # Extract source info
         sources = []
-        for doc in retrieval_result.documents:
+        for doc in final_documents:
             sources.append({
                 "file_name": doc.metadata.get("file_name", "unknown"),
                 "page": doc.metadata.get("page"),
                 "content_preview": doc.page_content[:100] + "..."
             })
+
+        # Use rerank scores if available, otherwise use retrieval scores
+        final_scores = rerank_scores if rerank_scores else retrieval_result.scores
 
         return RAGResponse(
             answer=gen_response.answer,
@@ -148,7 +168,7 @@ class RAGService:
             sources=sources,
             num_sources=len(sources),
             model_used=gen_response.model_used,
-            retrieval_scores=retrieval_result.scores
+            retrieval_scores=final_scores
         )
 
 

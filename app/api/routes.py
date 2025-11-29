@@ -47,11 +47,14 @@ async def query_knowledge_base(request: QueryRequest):
         {"question": "What is RAG?", "k": 3, "include_sources": true}
     """
     try:
-        # Query RAG system
+        # Query RAG system with advanced options
         rag_response = rag_service.query(
             request.question,
             k=request.k,
-            include_scores=request.include_sources
+            include_scores=request.include_sources,
+            use_hybrid_search=request.use_hybrid_search,
+            optimize_query=request.optimize_query,
+            use_reranking=request.use_reranking
         )
 
         # Format sources

@@ -9,12 +9,13 @@ Implements:
 These techniques improve retrieval accuracy beyond basic similarity search.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from sentence_transformers import CrossEncoder
 from app.services.vector_store import vector_store
 from app.core.config import settings
 
@@ -32,6 +33,15 @@ class AdvancedRetrieval:
     def __init__(self):
         self.vector_store = vector_store
         self.llm = OllamaLLM(model=settings.ollama_model, temperature=0.1)
+        self._cross_encoder = None  # Lazy load (only when reranking is used)
+
+    def _get_cross_encoder(self):
+        """Lazy load cross-encoder model (only when needed)"""
+        if self._cross_encoder is None:
+            print("[i] Loading cross-encoder for reranking...")
+            self._cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+            print("[OK] Cross-encoder ready!")
+        return self._cross_encoder
 
     def hybrid_search(
         self,
@@ -126,6 +136,55 @@ Optimized query:""")
         except:
             # If optimization fails, return original
             return query
+
+    def rerank(
+        self,
+        query: str,
+        documents: List[Document],
+        top_k: int = None
+    ) -> List[Tuple[Document, float]]:
+        """
+        Rerank documents using cross-encoder for better relevance scoring.
+
+        How it works:
+        - Cross-encoder scores each (query, document) pair
+        - More accurate than cosine similarity (but slower)
+        - Use after initial retrieval to refine top results
+
+        Args:
+            query: Search query
+            documents: Documents to rerank
+            top_k: Return top K results (default: all)
+
+        Returns:
+            List of (Document, score) tuples sorted by relevance (highest first)
+        """
+        if not documents:
+            return []
+
+        # Get cross-encoder model (lazy load)
+        cross_encoder = self._get_cross_encoder()
+
+        # Prepare pairs for scoring
+        pairs = [[query, doc.page_content] for doc in documents]
+
+        # Score all pairs (higher = more relevant)
+        print(f"[i] Reranking {len(documents)} documents...")
+        scores = cross_encoder.predict(pairs)
+
+        # Combine documents with scores
+        doc_score_pairs = list(zip(documents, scores))
+
+        # Sort by score (highest first - cross-encoder higher = better)
+        ranked = sorted(doc_score_pairs, key=lambda x: x[1], reverse=True)
+
+        # Limit to top_k
+        if top_k:
+            ranked = ranked[:top_k]
+
+        print(f"[OK] Reranked! Top score: {ranked[0][1]:.4f}")
+
+        return ranked
 
 
 # Global instance
