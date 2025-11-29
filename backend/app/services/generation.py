@@ -39,34 +39,19 @@ class GenerationService:
         """Initialize all LLMs"""
         import os
         print(f"[i] Loading LLM providers...")
-        print(f"[DEBUG] RENDER env var: {os.getenv('RENDER')}")
-        print(f"[DEBUG] GROQ_API_KEY set: {bool(settings.groq_api_key)}")
 
         is_render = os.getenv("RENDER") == "true"
 
         if is_render:
             # On Render: Use Groq as primary (no local Ollama)
-            print("[i] Render deployment detected - using Groq as primary")
-            self.ollama = None  # Not available on Render
-
-            if settings.groq_api_key:
-                try:
-                    print("[i] Initializing ChatGroq...")
-                    self.groq = ChatGroq(
-                        api_key=settings.groq_api_key,
-                        model="llama-3.3-70b-versatile",  # Groq Llama 3.3 70B
-                        temperature=0.1
-                    )
-                    print("[OK] ChatGroq initialized successfully!")
-                except Exception as e:
-                    print(f"[ERROR] ChatGroq initialization failed: {e}")
-                    self.groq = None
-            else:
-                print("[ERROR] GROQ_API_KEY not found in settings!")
-                self.groq = None
+            self.ollama = None
+            self.groq = ChatGroq(
+                api_key=settings.groq_api_key,
+                model="llama-3.3-70b-versatile",
+                temperature=0.1
+            ) if settings.groq_api_key else None
         else:
             # Local dev: Ollama primary, Groq fallback
-            print("[i] Local development - using Ollama as primary")
             self.ollama = OllamaLLM(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
@@ -75,13 +60,14 @@ class GenerationService:
             )
             self.groq = ChatGroq(
                 api_key=settings.groq_api_key,
-                model="llama-3.3-70b-versatile",  # Groq Llama 3.3 70B
+                model="llama-3.3-70b-versatile",
                 temperature=0.1
             ) if settings.groq_api_key else None
 
-        print(f"[OK] LLM initialization complete!")
-        print(f"[DEBUG] self.ollama = {self.ollama}")
-        print(f"[DEBUG] self.groq = {self.groq}")
+        print(f"[OK] LLMs ready!")
+        print(f"  - Ollama: {settings.ollama_model} (primary)" if self.ollama else "  - Groq: llama-3.3-70b (primary)")
+        if self.groq and self.ollama:
+            print(f"  - Groq: Configured (fallback)")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""

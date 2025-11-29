@@ -41,17 +41,6 @@ async def lifespan(app: FastAPI):
     print("\n" + "=" * 70)
     print("Enterprise RAG API Starting...")
     print("=" * 70)
-
-    # Force-load services to see initialization
-    try:
-        print("[i] Initializing services...")
-        from app.services.generation import generation_service
-        print(f"[OK] Generation service loaded: {generation_service}")
-    except Exception as e:
-        print(f"[ERROR] Failed to load generation service: {e}")
-        import traceback
-        traceback.print_exc()
-
     print(f"LLM Model: {settings.ollama_model}")
     print(f"Embedding Model: {settings.embedding_model}")
     print(f"Vector DB: {settings.chroma_persist_dir}")
