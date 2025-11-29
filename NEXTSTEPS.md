@@ -82,16 +82,13 @@ Record 5-minute walkthrough showing:
 4. Show cache hit (instant response)
 5. Show stats dashboard
 
-#### Production Improvements (Optional)
+#### Production Improvements
 **Already implemented:**
 - ✅ Document management UI (FileList.tsx with list + delete)
 - ✅ Conversation history persistence (conversation.py service with Redis)
 - ✅ Comprehensive evaluation metrics (test_rag_evaluation.py with 19 queries)
 - ✅ Good error messages in frontend (try/catch with user-friendly messages)
-
-**Not implemented (low priority):**
-- ❌ Authentication (JWT tokens) - Not critical for portfolio demo
-- ❌ Document upload progress bar - Works but could be enhanced
+- ✅ Upload state management (uploading state, success/error feedback)
 
 ---
 
