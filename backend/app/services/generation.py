@@ -1,10 +1,9 @@
 """
 Generation Service with LLM Fallback
 
-3-Tier LLM Strategy:
+2-Tier LLM Strategy:
 1. Ollama (local, unlimited) - Primary
 2. Groq (350+ tokens/sec, free tier) - Fallback for speed
-3. Gemini (generous free tier) - Final fallback
 
 Benefits:
 - Speed: Groq is 10-30x faster than local Ollama for demos
@@ -16,7 +15,6 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_ollama import OllamaLLM
 from langchain_groq import ChatGroq
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
@@ -58,19 +56,9 @@ class GenerationService:
                 temperature=0.1
             )
 
-        # Fallback 2: Gemini (generous free tier)
-        self.gemini = None
-        if settings.gemini_api_key:
-            self.gemini = ChatGoogleGenerativeAI(
-                google_api_key=settings.gemini_api_key,
-                model="gemini-pro",
-                temperature=0.1
-            )
-
         print(f"[OK] LLMs ready!")
         print(f"  - Ollama: {settings.ollama_model} (primary)")
         print(f"  - Groq: {'Configured' if self.groq else 'Not available'}")
-        print(f"  - Gemini: {'Configured' if self.gemini else 'Not available'}")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
@@ -149,19 +137,6 @@ Answer:""")
             response = self._generate_with_llm(
                 self.groq,
                 "groq/llama3-70b",
-                query,
-                context
-            )
-
-            if response:
-                return response
-
-        # TIER 3: Try Gemini (generous free tier)
-        if self.gemini:
-            print("[i] Groq unavailable, trying Gemini...")
-            response = self._generate_with_llm(
-                self.gemini,
-                "gemini/gemini-pro",
                 query,
                 context
             )
