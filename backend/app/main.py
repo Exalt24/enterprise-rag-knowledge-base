@@ -116,12 +116,20 @@ if __name__ == "__main__":
     # Use Render's PORT env var, default to 8001 for local
     port = int(os.getenv("PORT", 8001))
 
-    print("Starting FastAPI server...")
-    print(f"Visit: http://localhost:{port}/docs for interactive API documentation")
+    # Disable reload on Render (production)
+    is_production = os.getenv("RENDER") == "true"
+
+    print("=" * 70)
+    print(f"Starting FastAPI server on port {port}...")
+    print(f"Environment: {'Production (Render)' if is_production else 'Development'}")
+    print(f"Host: 0.0.0.0")
+    print(f"Port: {port}")
+    print("=" * 70)
 
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=port,
-        reload=True  # Auto-reload on code changes
+        reload=False if is_production else True,  # No reload in production
+        log_level="info"
     )
