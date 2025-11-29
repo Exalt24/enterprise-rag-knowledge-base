@@ -33,9 +33,9 @@ Production-ready Retrieval-Augmented Generation system with advanced search, 3-t
 ## Live Demo
 
 **🌐 Try it now:**
+- **Frontend:** https://enterprise-rag-knowledge-base.vercel.app
 - **API:** https://enterprise-rag-api.onrender.com
-- **Docs:** https://enterprise-rag-api.onrender.com/docs
-- **Frontend:** Coming soon (deploying to Vercel)
+- **API Docs:** https://enterprise-rag-api.onrender.com/docs
 
 **Note:** Render free tier may sleep after 15min inactivity (first request takes ~30s to wake up)
 
