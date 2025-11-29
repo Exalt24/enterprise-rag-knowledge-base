@@ -36,14 +36,19 @@ class HFAPIEmbeddingService:
 
     def __init__(self):
         if self._embeddings is None:
+            import os
             print(f"[i] Using HuggingFace Inference API embeddings (cloud, 0MB)")
+
+            hf_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+            if not hf_token:
+                raise ValueError("HUGGINGFACEHUB_API_TOKEN required for Render deployment")
 
             # Use HuggingFace's free Inference API
             # Same model as local: sentence-transformers/all-MiniLM-L6-v2
             self._embeddings = HuggingFaceEndpointEmbeddings(
                 model="sentence-transformers/all-MiniLM-L6-v2",
                 task="feature-extraction",
-                huggingfacehub_api_token=None  # Public models don't need token
+                huggingfacehub_api_token=hf_token
             )
 
             print(f"[OK] Cloud embeddings ready! (0MB memory)")
