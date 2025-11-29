@@ -19,6 +19,9 @@ export function ChatInterface() {
   const [conversationId] = useState(() => `conv_${Date.now()}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Check if running on production (Render has memory limits)
+  const isProd = process.env.NEXT_PUBLIC_API_URL?.includes("onrender.com") || false;
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -126,14 +129,20 @@ export function ChatInterface() {
             <span className="text-slate-300">Hybrid Search</span>
           </label>
 
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label
+            className="flex items-center gap-2 cursor-pointer"
+            title={isProd ? "Cross-encoder reranking unavailable on free tier (memory limit)" : "Use cross-encoder for most accurate results"}
+          >
             <input
               type="checkbox"
               checked={useReranking}
               onChange={(e) => setUseReranking(e.target.checked)}
               className="rounded"
+              disabled={isProd}
             />
-            <span className="text-slate-300">Reranking</span>
+            <span className={isProd ? "text-slate-500" : "text-slate-300"}>
+              Reranking {isProd && <span className="text-xs">(unavailable)</span>}
+            </span>
           </label>
 
           <span className="text-slate-500 text-xs ml-auto flex items-center gap-1">
