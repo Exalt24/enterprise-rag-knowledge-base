@@ -1,11 +1,23 @@
-# CRITICAL: Protect API Keys and Secrets
+# =============================================================================
+# Environment & Secrets (CRITICAL - Protect API Keys!)
+# =============================================================================
 .env
 *.env
 .env.local
+.env.*.local
+.env.backup
 
-# Python
+# =============================================================================
+# Backend (Python)
+# =============================================================================
+
+# Virtual Environments
+backend/venv/
+backend/env/
 venv/
 env/
+
+# Python
 *.pyc
 __pycache__/
 *.py[cod]
@@ -29,6 +41,9 @@ wheels/
 *.egg
 
 # Data & Databases
+backend/data/chroma/
+backend/data/test_chroma/
+backend/data/documents/
 data/chroma/
 data/test_chroma/
 data/documents/
@@ -36,29 +51,63 @@ data/documents/
 *.sqlite
 *.sqlite3
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Logs
-*.log
-logs/
-
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# =============================================================================
+# Frontend (Next.js)
+# =============================================================================
 
-# Environment
-.env.backup
+# Dependencies
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.*
+node_modules/
 
+# Next.js
+frontend/.next/
+frontend/out/
+.next/
+out/
+
+# Production
+frontend/build
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# =============================================================================
+# IDE & Editors
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =============================================================================
 # OS
+# =============================================================================
+.DS_Store
 Thumbs.db
+
+# =============================================================================
+# Logs
+# =============================================================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============================================================================
+# Jupyter Notebook
+# =============================================================================
+.ipynb_checkpoints
