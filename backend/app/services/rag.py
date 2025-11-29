@@ -19,6 +19,7 @@ from langchain_core.documents import Document
 from app.services.retrieval import retrieval_service, RetrievalResult
 from app.services.generation import generation_service, GenerationResponse
 from app.services.advanced_retrieval import advanced_retrieval
+from app.services.cache import cache_service
 
 
 class RAGResponse(BaseModel):
@@ -162,7 +163,7 @@ class RAGService:
         # Use rerank scores if available, otherwise use retrieval scores
         final_scores = rerank_scores if rerank_scores else retrieval_result.scores
 
-        return RAGResponse(
+        response = RAGResponse(
             answer=gen_response.answer,
             query=question,
             sources=sources,
@@ -170,6 +171,15 @@ class RAGService:
             model_used=gen_response.model_used,
             retrieval_scores=final_scores
         )
+
+        # Cache the result for future queries
+        cache_service.set(question, {
+            "answer": response.answer,
+            "sources": sources,
+            "model_used": response.model_used
+        }, cache_options)
+
+        return response
 
 
 # Global instance
