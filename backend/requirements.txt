@@ -6,13 +6,14 @@ pydantic-settings
 python-multipart
 
 # LangChain & RAG (Modern Packages - No Deprecations)
-langchain
+langchain>=0.3.0
+langchain-core>=0.3.0
 langchain-community
 langchain-ollama
 langchain-huggingface
 langchain-groq
-langchain-google-genai  # For Gemini API (embeddings + LLM)
-google-generativeai  # Required for Gemini
+langchain-google-genai>=2.0.0  # For Gemini API (embeddings + LLM)
+google-generativeai
 
 # Vector Database & Embeddings
 chromadb
