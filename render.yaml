@@ -14,7 +14,7 @@ services:
     runtime: python
     plan: free
     region: singapore  # Closest to you!
-    buildCommand: cd backend && pip install -r requirements.txt
+    buildCommand: cd backend && pip install -r requirements-lock.txt
     startCommand: cd backend && python -m app.main
     healthCheckPath: /api/health
     envVars:
