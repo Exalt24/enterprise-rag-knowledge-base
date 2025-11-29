@@ -48,6 +48,12 @@ class Settings(BaseSettings):
         description="Chroma database storage path"
     )
 
+    # Redis Cache
+    redis_url: Optional[str] = Field(
+        default=None,
+        description="Redis connection URL for caching"
+    )
+
     # Document Processing
     chunk_size: int = Field(
         default=500,
@@ -104,6 +110,7 @@ def print_config():
     print(f"Retrieval Top-K: {settings.retrieval_top_k}")
     print(f"Groq API: {'Configured' if settings.groq_api_key else 'Not set'}")
     print(f"Gemini API: {'Configured' if settings.gemini_api_key else 'Not set'}")
+    print(f"Redis Cache: {'Configured' if settings.redis_url else 'Not set (using in-memory)'}")
     print("=" * 70)
 
 

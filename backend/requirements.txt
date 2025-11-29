@@ -26,5 +26,5 @@ python-docx
 # Utilities
 python-dotenv
 
-# Optional: Redis for caching (install later if needed)
-# redis
+# Redis for caching
+redis

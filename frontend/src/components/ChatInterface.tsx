@@ -83,9 +83,7 @@ export function ChatInterface() {
   };
 
   const handleExport = () => {
-    const exportData = messages.map(m => `${m.type.toUpperCase()}: ${m.content}`).join('
-
-');
+    const exportData = messages.map(m => `${m.type.toUpperCase()}: ${m.content}`).join('\n\n');
     const blob = new Blob([exportData], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

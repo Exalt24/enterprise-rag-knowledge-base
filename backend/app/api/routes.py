@@ -183,23 +183,29 @@ async def ingest_document(file: UploadFile = File(...)):
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats():
     """
-    Get database statistics.
+    Get database and cache statistics.
 
     Returns:
     - Total documents stored
     - Embedding model info
     - LLM model info
     - Collection details
+    - Cache statistics (hits, misses, hit rate)
     """
     try:
         stats = vector_store.get_stats()
+
+        # Import cache service for stats
+        from app.services.cache import cache_service
+        cache_stats = cache_service.get_stats()
 
         return StatsResponse(
             total_documents=stats["total_documents"],
             collection_name=stats["collection_name"],
             embedding_model=stats["embedding_model"],
             embedding_dimension=stats["embedding_dimension"],
-            llm_model=settings.ollama_model
+            llm_model=settings.ollama_model,
+            cache_stats=cache_stats
         )
 
     except Exception as e:

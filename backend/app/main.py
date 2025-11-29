@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.core.config import settings
+from app.core.rate_limiter import RateLimitMiddleware
 
 
 # =============================================================================
@@ -64,6 +65,9 @@ app = FastAPI(
     redoc_url="/redoc",  # ReDoc UI
     lifespan=lifespan  # Modern lifespan handler
 )
+
+# Rate limiting middleware (before CORS)
+app.add_middleware(RateLimitMiddleware)
 
 # CORS middleware (allows frontend to call API)
 app.add_middleware(
