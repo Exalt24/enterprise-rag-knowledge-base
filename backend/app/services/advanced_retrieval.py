@@ -9,7 +9,7 @@ Implements:
 These techniques improve retrieval accuracy beyond basic similarity search.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Tuple
 from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.prompts import ChatPromptTemplate
@@ -22,9 +22,11 @@ import os
 if not os.getenv("RENDER"):
     from sentence_transformers import CrossEncoder
     from langchain_ollama import OllamaLLM
+
     CROSS_ENCODER_AVAILABLE = True
 else:
     from langchain_groq import ChatGroq
+
     CROSS_ENCODER_AVAILABLE = False
     print("[i] Cross-encoder disabled (Render memory limit)")
 
@@ -49,7 +51,7 @@ class AdvancedRetrieval:
                 self.llm = ChatGroq(
                     api_key=settings.groq_api_key,
                     model="llama-3.3-70b-versatile",  # Groq Llama 3.3 70B
-                    temperature=0.1
+                    temperature=0.1,
                 )
             else:
                 self.llm = None
@@ -85,7 +87,7 @@ class AdvancedRetrieval:
 
         Performance improvement: 250x faster for repeated queries!
         """
-        current_count = self.vector_store.get_stats()['total_documents']
+        current_count = self.vector_store.get_stats()["total_documents"]
 
         # Rebuild only if documents changed
         if self._bm25_retriever is None or current_count != self._bm25_doc_count:
@@ -113,7 +115,11 @@ class AdvancedRetrieval:
         return self._bm25_retriever
 
     def hybrid_search(
-        self, query: str, k: int = None, vector_weight: float = 0.7, with_scores: bool = False
+        self,
+        query: str,
+        k: int = None,
+        vector_weight: float = 0.7,
+        with_scores: bool = False,
     ) -> tuple[List[Document], List[float]] | List[Document]:
         """
         Hybrid search combining vector similarity and BM25 keyword search.
@@ -137,7 +143,9 @@ class AdvancedRetrieval:
                 query, k=k * 2
             )
             vector_docs = [doc for doc, score in vector_results_with_scores]
-            vector_scores_dict = {doc.page_content: score for doc, score in vector_results_with_scores}
+            vector_scores_dict = {
+                doc.page_content: score for doc, score in vector_results_with_scores
+            }
 
             # Get BM25 retriever (cached - avoids rebuilding on every query)
             bm25_retriever = self._get_bm25_retriever(k * 2)
@@ -151,8 +159,8 @@ class AdvancedRetrieval:
                 vector_dist = vector_scores_dict.get(doc.page_content, 0)
                 vector_sim = 1 / (1 + vector_dist)  # Convert distance to similarity
                 combined_scores[doc.page_content] = {
-                    'doc': doc,
-                    'score': vector_sim * vector_weight  # Apply weight
+                    "doc": doc,
+                    "score": vector_sim * vector_weight,  # Apply weight
                 }
 
             # Add BM25 results (assume normalized score of 0.5 for keyword matches)
@@ -160,23 +168,21 @@ class AdvancedRetrieval:
             for doc in bm25_results:
                 if doc.page_content in combined_scores:
                     # Document found in both - boost score
-                    combined_scores[doc.page_content]['score'] += 0.5 * bm25_weight
+                    combined_scores[doc.page_content]["score"] += 0.5 * bm25_weight
                 else:
                     # Only found via BM25
                     combined_scores[doc.page_content] = {
-                        'doc': doc,
-                        'score': 0.5 * bm25_weight  # BM25 contribution
+                        "doc": doc,
+                        "score": 0.5 * bm25_weight,  # BM25 contribution
                     }
 
             # Sort by combined score (higher is better now)
             sorted_results = sorted(
-                combined_scores.values(),
-                key=lambda x: x['score'],
-                reverse=True
+                combined_scores.values(), key=lambda x: x["score"], reverse=True
             )[:k]
 
-            documents = [item['doc'] for item in sorted_results]
-            scores = [item['score'] for item in sorted_results]
+            documents = [item["doc"] for item in sorted_results]
+            scores = [item["score"] for item in sorted_results]
 
             if with_scores:
                 return documents, scores
@@ -187,7 +193,9 @@ class AdvancedRetrieval:
             # Fallback to basic vector search
             if with_scores:
                 results_with_scores = self.vector_store.search_with_scores(query, k=k)
-                return [doc for doc, _ in results_with_scores], [float(score) for _, score in results_with_scores]
+                return [doc for doc, _ in results_with_scores], [
+                    float(score) for _, score in results_with_scores
+                ]
             return self.vector_store.search(query, k=k)
 
     def optimize_query(self, query: str) -> str:
@@ -265,7 +273,7 @@ Optimized query:"""
         if not CROSS_ENCODER_AVAILABLE:
             print("[i] Reranking skipped (not available on Render)")
             # Return documents with uniform scores
-            return [(doc, 0.5) for doc in documents[:top_k or len(documents)]]
+            return [(doc, 0.5) for doc in documents[: top_k or len(documents)]]
 
         # Get cross-encoder model (lazy load)
         cross_encoder = self._get_cross_encoder()
@@ -305,7 +313,11 @@ Optimized query:"""
         return ranked
 
     def hyde_search(
-        self, query: str, k: int = None, use_hybrid: bool = True, with_scores: bool = False
+        self,
+        query: str,
+        k: int = None,
+        use_hybrid: bool = True,
+        with_scores: bool = False,
     ) -> tuple[List[Document], List[float]] | List[Document]:
         """
         HyDE (Hypothetical Document Embeddings) search.
@@ -332,7 +344,11 @@ Optimized query:"""
         """
         if not self.llm:
             print("[!] HyDE requires LLM, falling back to regular search")
-            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+            return (
+                self.hybrid_search(query, k=k, with_scores=with_scores)
+                if use_hybrid
+                else self.vector_store.search(query, k=k)
+            )
 
         k = k or settings.retrieval_top_k
 
@@ -357,11 +373,18 @@ Hypothetical answer (2-3 sentences):"""
 
             # Search using the hypothetical answer
             if use_hybrid:
-                results = self.hybrid_search(hypothetical_answer, k=k, with_scores=with_scores)
+                results = self.hybrid_search(
+                    hypothetical_answer, k=k, with_scores=with_scores
+                )
             else:
                 if with_scores:
-                    results_with_scores = self.vector_store.search_with_scores(hypothetical_answer, k=k)
-                    results = ([doc for doc, _ in results_with_scores], [float(score) for _, score in results_with_scores])
+                    results_with_scores = self.vector_store.search_with_scores(
+                        hypothetical_answer, k=k
+                    )
+                    results = (
+                        [doc for doc, _ in results_with_scores],
+                        [float(score) for _, score in results_with_scores],
+                    )
                 else:
                     results = self.vector_store.search(hypothetical_answer, k=k)
 
@@ -369,10 +392,18 @@ Hypothetical answer (2-3 sentences):"""
 
         except Exception as e:
             print(f"[!] HyDE failed: {e}, falling back to regular search")
-            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+            return (
+                self.hybrid_search(query, k=k, with_scores=with_scores)
+                if use_hybrid
+                else self.vector_store.search(query, k=k)
+            )
 
     def multi_query_search(
-        self, query: str, k: int = None, use_hybrid: bool = True, with_scores: bool = False
+        self,
+        query: str,
+        k: int = None,
+        use_hybrid: bool = True,
+        with_scores: bool = False,
     ) -> tuple[List[Document], List[float]] | List[Document]:
         """
         Multi-Query retrieval: Generate multiple query variations and merge results.
@@ -402,7 +433,11 @@ Hypothetical answer (2-3 sentences):"""
         """
         if not self.llm:
             print("[!] Multi-query requires LLM, falling back to regular search")
-            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+            return (
+                self.hybrid_search(query, k=k, with_scores=with_scores)
+                if use_hybrid
+                else self.vector_store.search(query, k=k)
+            )
 
         k = k or settings.retrieval_top_k
 
@@ -434,11 +469,17 @@ Query variations:
             variations_text = chain.invoke({"query": query}).strip()
 
             # Parse variations (split by newlines, clean up)
-            variations = [line.strip() for line in variations_text.split('\n') if line.strip()]
+            variations = [
+                line.strip() for line in variations_text.split("\n") if line.strip()
+            ]
             # Remove numbering if present
-            variations = [line.split('. ', 1)[-1] if '. ' in line else line for line in variations]
+            variations = [
+                line.split(". ", 1)[-1] if ". " in line else line for line in variations
+            ]
             # Add original query
-            all_queries = [query] + variations[:3]  # Max 4 total (original + 3 variations)
+            all_queries = [query] + variations[
+                :3
+            ]  # Max 4 total (original + 3 variations)
 
             print(f"[OK] Generated {len(all_queries)-1} variations")
             for i, q in enumerate(all_queries[1:], 1):
@@ -450,24 +491,35 @@ Query variations:
 
             for q in all_queries:
                 if use_hybrid:
-                    docs, scores = self.hybrid_search(q, k=k*2, with_scores=True)
+                    docs, scores = self.hybrid_search(q, k=k * 2, with_scores=True)
                 else:
-                    results_with_scores = self.vector_store.search_with_scores(q, k=k*2)
-                    docs, scores = [doc for doc, _ in results_with_scores], [float(score) for _, score in results_with_scores]
+                    results_with_scores = self.vector_store.search_with_scores(
+                        q, k=k * 2
+                    )
+                    docs, scores = [doc for doc, _ in results_with_scores], [
+                        float(score) for _, score in results_with_scores
+                    ]
 
                 # Merge results (keep best score for duplicates)
                 for doc, score in zip(docs, scores):
                     content_key = doc.page_content
-                    if content_key not in all_results or score > all_scores[content_key]:
+                    if (
+                        content_key not in all_results
+                        or score > all_scores[content_key]
+                    ):
                         all_results[content_key] = doc
                         all_scores[content_key] = score
 
             # Sort by score and return top k
-            sorted_items = sorted(all_results.items(), key=lambda x: all_scores[x[0]], reverse=True)[:k]
+            sorted_items = sorted(
+                all_results.items(), key=lambda x: all_scores[x[0]], reverse=True
+            )[:k]
             final_docs = [doc for _, doc in sorted_items]
             final_scores = [all_scores[doc.page_content] for doc in final_docs]
 
-            print(f"[OK] Multi-Query merged {len(all_results)} unique docs, returning top {len(final_docs)}")
+            print(
+                f"[OK] Multi-Query merged {len(all_results)} unique docs, returning top {len(final_docs)}"
+            )
 
             if with_scores:
                 return final_docs, final_scores
@@ -475,7 +527,11 @@ Query variations:
 
         except Exception as e:
             print(f"[!] Multi-Query failed: {e}, falling back to regular search")
-            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+            return (
+                self.hybrid_search(query, k=k, with_scores=with_scores)
+                if use_hybrid
+                else self.vector_store.search(query, k=k)
+            )
 
 
 # Global instance

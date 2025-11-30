@@ -9,7 +9,7 @@ Handles document retrieval from vector database with optimizations:
 This is the "R" in RAG - getting the right context!
 """
 
-from typing import List, Tuple
+from typing import List
 from pydantic import BaseModel, Field
 from langchain_core.documents import Document
 from app.services.vector_store import vector_store
