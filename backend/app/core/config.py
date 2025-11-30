@@ -28,10 +28,14 @@ class Settings(BaseSettings):
         description="Ollama model name"
     )
 
-    # Groq API Key (cloud LLM for production)
+    # Cloud API Keys
     groq_api_key: Optional[str] = Field(
         default=None,
         description="Groq API key for fast inference (required for Render deployment)"
+    )
+    huggingfacehub_api_token: Optional[str] = Field(
+        default=None,
+        description="HuggingFace API token for cloud embeddings (required for Render deployment)"
     )
 
     # Vector Database
