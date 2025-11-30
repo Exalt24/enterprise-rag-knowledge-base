@@ -24,43 +24,13 @@ def test_complete_pipeline():
     print("Complete RAG Ingestion Pipeline Test")
     print("=" * 70)
 
-    # Create test document
-    test_dir = Path("data/documents")
-    test_dir.mkdir(exist_ok=True, parents=True)
+    # Use actual resume PDF instead of test file
+    test_file = Path("data/documents/Daniel_Alexis_Cruz_Resume_ATS.pdf")
 
-    test_file = test_dir / "rag_basics.txt"
-    test_file.write_text("""
-Enterprise RAG Knowledge Base System
-
-This system demonstrates production-ready RAG architecture with the following components:
-
-1. Document Processing
-   - Multi-format support: PDF, DOCX, TXT, Markdown
-   - Intelligent text chunking with overlap
-   - Metadata extraction and preservation
-
-2. Embedding Generation
-   - Local Sentence Transformers (all-MiniLM-L6-v2)
-   - 384-dimensional vectors
-   - Zero API costs - unlimited usage
-
-3. Vector Database
-   - Chroma for persistent storage
-   - Fast similarity search
-   - Metadata filtering capabilities
-
-4. Retrieval Strategy
-   - Semantic search (find by meaning)
-   - Configurable top-k results
-   - Score-based ranking
-
-5. LLM Integration
-   - Llama 3 via Ollama (local)
-   - Groq API fallback (350+ tokens/sec)
-   - Context-aware generation
-
-The system achieves 90%+ retrieval relevance with sub-2 second query latency while running on completely free and open-source technologies.
-    """)
+    if not test_file.exists():
+        print(f"\n[X] Resume not found: {test_file}")
+        print("Please add Daniel_Alexis_Cruz_Resume_ATS.pdf to data/documents/")
+        return False
 
     # Initialize ingestion service
     ingestion = IngestionService()
@@ -88,10 +58,10 @@ The system achieves 90%+ retrieval relevance with sub-2 second query latency whi
     print("=" * 70)
 
     test_queries = [
-        "What embedding model is used?",
-        "What is the query latency?",
-        "What vector database is used?",
-        "Does it support PDF files?"
+        "What are Daniel's skills?",
+        "What projects has Daniel worked on?",
+        "What is Daniel's education?",
+        "What companies has Daniel worked for?"
     ]
 
     for query in test_queries:
@@ -119,12 +89,12 @@ The system achieves 90%+ retrieval relevance with sub-2 second query latency whi
     print("=" * 70)
 
     print("\nWhat you just did:")
-    print("  ✅ Parsed a document")
-    print("  ✅ Chunked it into smaller pieces")
-    print("  ✅ Generated embeddings (384-dim vectors)")
-    print("  ✅ Stored in Chroma vector database")
-    print("  ✅ Searched by semantic meaning")
-    print("\nYou have a working RAG system! 🎉")
+    print("  [+] Parsed a document")
+    print("  [+] Chunked it into smaller pieces")
+    print("  [+] Generated embeddings (384-dim vectors)")
+    print("  [+] Stored in Chroma vector database")
+    print("  [+] Searched by semantic meaning")
+    print("\nYou have a working RAG system!")
 
     return True
 
