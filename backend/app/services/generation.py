@@ -151,7 +151,7 @@ Answer:""")
 
             response = self._generate_with_llm(
                 self.groq,
-                f"groq/{settings.ollama_model}",
+                "groq/llama-3.3-70b-versatile",
                 query,
                 context
             )

@@ -145,11 +145,26 @@ async def ingest_document(file: UploadFile = File(...)):
                 error=f"Supported formats: PDF, DOCX, TXT, MD. Got: {file_path.suffix}"
             )
 
+        # Security: Check file size (configurable via settings)
+        max_size_bytes = settings.max_file_size_mb * 1024 * 1024
+        file.file.seek(0, 2)  # Seek to end
+        size = file.file.tell()
+        file.file.seek(0)  # Seek back to start
+
+        if size > max_size_bytes:
+            return IngestResponse(
+                success=False,
+                message="File too large",
+                error=f"Max file size: {settings.max_file_size_mb}MB"
+            )
+
         # Save uploaded file
         upload_dir = Path("data/documents")
         upload_dir.mkdir(exist_ok=True, parents=True)
 
-        save_path = upload_dir / file.filename
+        # Security: Sanitize filename to prevent path traversal
+        safe_filename = Path(file.filename).name  # Only get basename, no directory
+        save_path = upload_dir / safe_filename
 
         with open(save_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -227,14 +242,20 @@ async def health_check():
     - Database has documents
     """
     try:
-        # Test Ollama
-        ollama_ok = True
+        import os
+
+        # Test LLM (Ollama locally, Groq on Render)
+        llm_ok = True
         try:
-            from langchain_ollama import OllamaLLM
-            llm = OllamaLLM(model=settings.ollama_model)
+            if os.getenv("RENDER"):
+                from langchain_groq import ChatGroq
+                llm = ChatGroq(api_key=settings.groq_api_key, model="llama-3.3-70b-versatile")
+            else:
+                from langchain_ollama import OllamaLLM
+                llm = OllamaLLM(model=settings.ollama_model)
             llm.invoke("test")
         except:
-            ollama_ok = False
+            llm_ok = False
 
         # Test vector DB
         vector_db_ok = True
@@ -246,11 +267,11 @@ async def health_check():
             vector_db_ok = False
 
         # Determine overall status
-        status = "healthy" if (ollama_ok and vector_db_ok) else "unhealthy"
+        status = "healthy" if (llm_ok and vector_db_ok) else "unhealthy"
 
         return HealthResponse(
             status=status,
-            ollama_connected=ollama_ok,
+            ollama_connected=llm_ok,
             vector_db_connected=vector_db_ok,
             total_documents=total_docs
         )
