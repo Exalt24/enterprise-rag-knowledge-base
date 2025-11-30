@@ -31,6 +31,7 @@ try:
         import pytesseract
         from PIL import Image
         import pdf2image
+
         OCR_AVAILABLE = True
         print("[i] OCR support enabled (local environment)")
     else:
@@ -55,7 +56,7 @@ class DocumentParser:
     - Specific error handling
     """
 
-    SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md'}
+    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
     @classmethod
     def is_supported(cls, file_path: str) -> bool:
@@ -63,7 +64,9 @@ class DocumentParser:
         return Path(file_path).suffix.lower() in cls.SUPPORTED_EXTENSIONS
 
     @classmethod
-    def parse(cls, file_path: str, split_by_page: bool = True, use_ocr: bool = False) -> List[Document]:
+    def parse(
+        cls, file_path: str, split_by_page: bool = True, use_ocr: bool = False
+    ) -> List[Document]:
         """
         Parse document and return LangChain Document objects.
 
@@ -93,17 +96,19 @@ class DocumentParser:
         # Route to appropriate parser
         extension = path.suffix.lower()
 
-        if extension == '.pdf':
+        if extension == ".pdf":
             return cls._parse_pdf(path, split_by_page, use_ocr)
-        elif extension == '.docx':
+        elif extension == ".docx":
             return cls._parse_docx(path)
-        elif extension in {'.txt', '.md'}:
+        elif extension in {".txt", ".md"}:
             return cls._parse_text(path)
 
         raise ValueError(f"No parser for {extension}")
 
     @classmethod
-    def _parse_pdf(cls, path: Path, split_by_page: bool = True, use_ocr: bool = False) -> List[Document]:
+    def _parse_pdf(
+        cls, path: Path, split_by_page: bool = True, use_ocr: bool = False
+    ) -> List[Document]:
         """
         Parse PDF file with flexible splitting and optional OCR.
 
@@ -148,7 +153,7 @@ class DocumentParser:
                             "char_count": len(text),
                             "word_count": len(text.split()),
                             "upload_date": upload_date,
-                            "file_size_kb": round(file_stat.st_size / 1024, 2)
+                            "file_size_kb": round(file_stat.st_size / 1024, 2),
                         },
                     )
                     documents.append(doc)
@@ -170,20 +175,22 @@ class DocumentParser:
 
                 combined_text = "\n\n".join(all_text)
 
-                return [Document(
-                    page_content=combined_text,
-                    metadata={
-                        "source": str(path),
-                        "file_name": path.name,
-                        "file_type": "pdf",
-                        "total_pages": len(reader.pages),
-                        "char_count": len(combined_text),
-                        "word_count": len(combined_text.split()),
-                        "upload_date": upload_date,
-                        "file_size_kb": round(file_stat.st_size / 1024, 2),
-                        "combined": True  # Flag that pages were combined
-                    }
-                )]
+                return [
+                    Document(
+                        page_content=combined_text,
+                        metadata={
+                            "source": str(path),
+                            "file_name": path.name,
+                            "file_type": "pdf",
+                            "total_pages": len(reader.pages),
+                            "char_count": len(combined_text),
+                            "word_count": len(combined_text.split()),
+                            "upload_date": upload_date,
+                            "file_size_kb": round(file_stat.st_size / 1024, 2),
+                            "combined": True,  # Flag that pages were combined
+                        },
+                    )
+                ]
 
         except PdfReadError as e:
             raise ValueError(f"PDF corrupted or encrypted: {path.name} - {e}")
@@ -205,9 +212,7 @@ class DocumentParser:
         try:
             # Convert PDF page to image
             images = pdf2image.convert_from_path(
-                str(path),
-                first_page=page_num + 1,
-                last_page=page_num + 1
+                str(path), first_page=page_num + 1, last_page=page_num + 1
             )
 
             if not images:
@@ -250,9 +255,11 @@ class DocumentParser:
                         "paragraphs": len(doc.paragraphs),
                         "char_count": len(text),
                         "word_count": len(text.split()),
-                        "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                        "file_size_kb": round(file_stat.st_size / 1024, 2)
-                    }
+                        "upload_date": datetime.fromtimestamp(
+                            file_stat.st_mtime
+                        ).isoformat(),
+                        "file_size_kb": round(file_stat.st_size / 1024, 2),
+                    },
                 )
             ]
 
@@ -267,7 +274,7 @@ class DocumentParser:
         Returns single Document with all content and rich metadata.
         """
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, "r", encoding="utf-8") as f:
                 text = f.read()
 
             if not text.strip():
@@ -285,16 +292,18 @@ class DocumentParser:
                         "file_type": path.suffix[1:],  # Remove the dot
                         "char_count": len(text),
                         "word_count": len(text.split()),
-                        "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                        "file_size_kb": round(file_stat.st_size / 1024, 2)
-                    }
+                        "upload_date": datetime.fromtimestamp(
+                            file_stat.st_mtime
+                        ).isoformat(),
+                        "file_size_kb": round(file_stat.st_size / 1024, 2),
+                    },
                 )
             ]
 
         except UnicodeDecodeError:
             # Try different encoding
             try:
-                with open(path, 'r', encoding='latin-1') as f:
+                with open(path, "r", encoding="latin-1") as f:
                     text = f.read()
 
                 file_stat = path.stat()
@@ -309,9 +318,11 @@ class DocumentParser:
                             "encoding": "latin-1",
                             "char_count": len(text),
                             "word_count": len(text.split()),
-                            "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                            "file_size_kb": round(file_stat.st_size / 1024, 2)
-                        }
+                            "upload_date": datetime.fromtimestamp(
+                                file_stat.st_mtime
+                            ).isoformat(),
+                            "file_size_kb": round(file_stat.st_size / 1024, 2),
+                        },
                     )
                 ]
             except Exception as e:
