@@ -61,28 +61,30 @@ class CacheService:
     Automatically falls back to in-memory if Redis unavailable.
     """
 
-    def __init__(self, default_ttl: int = 3600):
+    def __init__(self, default_ttl: int = None):
         """
         Initialize cache (Redis or in-memory fallback).
 
         Args:
-            default_ttl: Time to live in seconds (default: 1 hour)
+            default_ttl: Time to live in seconds (default: from config)
         """
-        self.default_ttl = default_ttl
+        from app.core.config import settings
+        self.default_ttl = default_ttl or settings.cache_ttl
         self._hits = 0
         self._misses = 0
         self._redis_client = None
         self._in_memory_cache: Dict[str, CachedResult] = {}
         self._use_redis = False
 
-        # Try to connect to Redis
+        # Try to connect to Redis with connection pooling
         if REDIS_AVAILABLE and settings.redis_url:
             try:
                 self._redis_client = redis.from_url(
                     settings.redis_url,
                     decode_responses=True,
                     socket_connect_timeout=5,
-                    socket_timeout=5
+                    socket_timeout=5,
+                    max_connections=settings.redis_max_connections
                 )
                 # Test connection
                 self._redis_client.ping()
@@ -227,9 +229,14 @@ class CacheService:
         """Clear all cached results (Redis or in-memory)"""
         try:
             if self._use_redis and self._redis_client:
-                # Clear Redis cache (only keys matching our pattern)
-                count = self._redis_client.dbsize()
-                self._redis_client.flushdb()
+                # Clear only our cache keys (MD5 hashes, 32 chars)
+                # Don't use flushdb() as it would delete rate limit keys too!
+                count = 0
+                for key in self._redis_client.scan_iter():
+                    # Only delete cache keys (MD5 hashes are 32 chars)
+                    if len(key) == 32 and key.isalnum():
+                        self._redis_client.delete(key)
+                        count += 1
                 print(f"[i] Redis cache cleared ({count} entries removed)")
             else:
                 count = len(self._in_memory_cache)

@@ -44,14 +44,15 @@ class RateLimiter:
         self.redis_client = None
         self.enabled = False
 
-        # Try to connect to Redis
+        # Try to connect to Redis with connection pooling
         if REDIS_AVAILABLE and settings.redis_url:
             try:
                 self.redis_client = redis.from_url(
                     settings.redis_url,
                     decode_responses=False,  # Work with bytes for performance
                     socket_connect_timeout=2,
-                    socket_timeout=2
+                    socket_timeout=2,
+                    max_connections=settings.redis_max_connections
                 )
                 # Test connection
                 self.redis_client.ping()

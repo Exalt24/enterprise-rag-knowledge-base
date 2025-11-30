@@ -86,6 +86,24 @@ class Settings(BaseSettings):
         description="API request timeout in seconds"
     )
 
+    # Cache Settings
+    cache_ttl: int = Field(
+        default=3600,
+        description="Cache time-to-live in seconds (1 hour)"
+    )
+
+    # File Upload Limits
+    max_file_size_mb: int = Field(
+        default=10,
+        description="Maximum file upload size in MB"
+    )
+
+    # Redis Connection Pool
+    redis_max_connections: int = Field(
+        default=10,
+        description="Maximum Redis connections in pool"
+    )
+
     class Config:
         env_file = ".env"
         case_sensitive = False
