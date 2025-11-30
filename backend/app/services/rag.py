@@ -244,18 +244,18 @@ if __name__ == "__main__":
         print(f"QUERY: {query}")
         print("=" * 70)
 
-        # Get RAG response
+        # Get RAG response with scores
         response = rag_service.query(query, include_scores=True)
 
         # Display answer
         print(f"\nANSWER:")
         print(response.answer)
 
-        # Display sources
+        # Display sources with relevance scores
         print(f"\nSOURCES ({response.num_sources}):")
         for i, source in enumerate(response.sources, 1):
             print(f"  [{i}] {source['file_name']}")
-            if include_scores and i <= len(response.retrieval_scores):
+            if response.retrieval_scores and i <= len(response.retrieval_scores):
                 print(f"      Relevance: {response.retrieval_scores[i-1]:.4f}")
 
     print("\n" + "=" * 70)
