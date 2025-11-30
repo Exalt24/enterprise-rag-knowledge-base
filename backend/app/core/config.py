@@ -28,18 +28,10 @@ class Settings(BaseSettings):
         description="Ollama model name"
     )
 
-    # Optional API Keys (fallback options)
-    openweather_api_key: Optional[str] = Field(
-        default=None,
-        description="OpenWeather API key"
-    )
+    # Groq API Key (cloud LLM for production)
     groq_api_key: Optional[str] = Field(
         default=None,
-        description="Groq API key for fast inference"
-    )
-    gemini_api_key: Optional[str] = Field(
-        default=None,
-        description="Google Gemini API key"
+        description="Groq API key for fast inference (required for Render deployment)"
     )
 
     # Vector Database
@@ -127,7 +119,6 @@ def print_config():
     print(f"Chunk Overlap: {settings.chunk_overlap} tokens")
     print(f"Retrieval Top-K: {settings.retrieval_top_k}")
     print(f"Groq API: {'Configured' if settings.groq_api_key else 'Not set'}")
-    print(f"Gemini API: {'Configured' if settings.gemini_api_key else 'Not set'}")
     print(f"Redis Cache: {'Configured' if settings.redis_url else 'Not set (using in-memory)'}")
     print("=" * 70)
 
