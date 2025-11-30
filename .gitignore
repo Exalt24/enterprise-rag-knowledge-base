@@ -52,6 +52,11 @@ data/documents/
 *.sqlite
 *.sqlite3
 
+# Backup files
+*.backup
+*.bak
+*~
+
 # Testing
 .pytest_cache/
 .coverage
@@ -112,3 +117,9 @@ yarn-error.log*
 # Jupyter Notebook
 # =============================================================================
 .ipynb_checkpoints
+
+# =============================================================================
+# Project-Specific
+# =============================================================================
+TODO-AFTER-LEARNING.md
+ACTUAL-CODE-REVIEW.md
