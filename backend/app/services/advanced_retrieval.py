@@ -192,28 +192,37 @@ class AdvancedRetrieval:
 
     def optimize_query(self, query: str) -> str:
         """
-        Optimize query for better retrieval using LLM.
+        Optimize query for better retrieval using LLM (IMPROVED).
 
         Techniques:
         1. Query rewriting (make query more specific)
-        2. Query expansion (add related terms)
+        2. Query expansion (add related terms and synonyms)
+        3. Keyword extraction
 
         Example:
-        Input:  "weather"
-        Output: "What is the current weather? temperature conditions forecast"
+        Input:  "React skills"
+        Output: "What React skills and frontend framework experience does the person have?
+                 React Next.js TypeScript JavaScript frontend"
         """
+        if not self.llm:
+            return query
 
         prompt = ChatPromptTemplate.from_template(
             """
-You are a query optimization assistant.
+You are a search query optimization expert.
 
-Given a user query, rewrite it to be more specific and add related search terms.
+Rewrite the user's query to be more specific and add relevant search keywords.
 
 Rules:
-1. Make the query more explicit and detailed
-2. Add 2-3 related keywords at the end
-3. Keep it concise (max 50 words)
-4. If query is already good, return it unchanged
+1. Expand the query into a complete question if it's just keywords
+2. Add 3-5 related technical terms, synonyms, or related concepts
+3. Keep it concise (max 60 words)
+4. For technical queries, add framework names, technology stack terms
+
+Examples:
+- "React skills" → "What React and frontend framework skills? React Next.js TypeScript JavaScript Vue"
+- "Python experience" → "What Python backend development experience? Python Django FastAPI Flask REST API"
+- "database" → "What database and data storage experience? PostgreSQL MySQL MongoDB Redis SQL NoSQL"
 
 Original query: {query}
 
@@ -225,8 +234,8 @@ Optimized query:"""
         try:
             optimized = chain.invoke({"query": query})
             return optimized.strip()
-        except:
-            # If optimization fails, return original
+        except Exception as e:
+            print(f"[!] Query optimization failed: {e}")
             return query
 
     def rerank(
@@ -294,6 +303,179 @@ Optimized query:"""
         print(f"[OK] Reranked! Top score: {ranked[0][1]:.4f} (normalized 0-1)")
 
         return ranked
+
+    def hyde_search(
+        self, query: str, k: int = None, use_hybrid: bool = True, with_scores: bool = False
+    ) -> tuple[List[Document], List[float]] | List[Document]:
+        """
+        HyDE (Hypothetical Document Embeddings) search.
+
+        Instead of searching with the query directly, generate a hypothetical answer
+        first, then search using that answer. This improves retrieval because answers
+        are more similar to documents than questions are.
+
+        Example:
+        Query: "What are Daniel's skills?"
+        ↓
+        LLM generates: "Daniel has extensive experience with React, Python, FastAPI..."
+        ↓
+        Search using the generated answer (better match to actual resume!)
+
+        Args:
+            query: Original user query
+            k: Number of results
+            use_hybrid: Use hybrid search (recommended)
+            with_scores: Return scores
+
+        Returns:
+            Documents (or documents + scores)
+        """
+        if not self.llm:
+            print("[!] HyDE requires LLM, falling back to regular search")
+            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+
+        k = k or settings.retrieval_top_k
+
+        print("[i] HyDE: Generating hypothetical answer...")
+
+        # Generate hypothetical answer
+        hyde_prompt = ChatPromptTemplate.from_template(
+            """
+Generate a detailed, hypothetical answer to this question as if you were answering from the document.
+Write in a natural, informative style.
+
+Question: {query}
+
+Hypothetical answer (2-3 sentences):"""
+        )
+
+        chain = hyde_prompt | self.llm | StrOutputParser()
+
+        try:
+            hypothetical_answer = chain.invoke({"query": query}).strip()
+            print(f"[OK] HyDE answer: {hypothetical_answer[:100]}...")
+
+            # Search using the hypothetical answer
+            if use_hybrid:
+                results = self.hybrid_search(hypothetical_answer, k=k, with_scores=with_scores)
+            else:
+                if with_scores:
+                    results_with_scores = self.vector_store.search_with_scores(hypothetical_answer, k=k)
+                    results = ([doc for doc, _ in results_with_scores], [float(score) for _, score in results_with_scores])
+                else:
+                    results = self.vector_store.search(hypothetical_answer, k=k)
+
+            return results
+
+        except Exception as e:
+            print(f"[!] HyDE failed: {e}, falling back to regular search")
+            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+
+    def multi_query_search(
+        self, query: str, k: int = None, use_hybrid: bool = True, with_scores: bool = False
+    ) -> tuple[List[Document], List[float]] | List[Document]:
+        """
+        Multi-Query retrieval: Generate multiple query variations and merge results.
+
+        Generates 3 different phrasings of the same question, searches with each,
+        then merges and deduplicates results. This catches documents that might be
+        missed by a single query phrasing.
+
+        Example:
+        Query: "What are Daniel's skills?"
+        ↓
+        Variations:
+        1. "What technologies does Daniel know?"
+        2. "List Daniel's technical expertise"
+        3. "What frameworks and tools has Daniel used?"
+        ↓
+        Search with all 3, merge results
+
+        Args:
+            query: Original user query
+            k: Number of final results
+            use_hybrid: Use hybrid search for each variation
+            with_scores: Return scores
+
+        Returns:
+            Merged and deduplicated documents (or with scores)
+        """
+        if not self.llm:
+            print("[!] Multi-query requires LLM, falling back to regular search")
+            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
+
+        k = k or settings.retrieval_top_k
+
+        print("[i] Multi-Query: Generating query variations...")
+
+        # Generate query variations
+        multi_query_prompt = ChatPromptTemplate.from_template(
+            """
+You are an AI assistant that generates alternative search queries.
+
+Given the original query, generate 3 different ways to ask the same question.
+Each variation should use different words but seek the same information.
+
+Rules:
+1. Generate exactly 3 variations
+2. Use different phrasing and keywords
+3. Keep each variation concise (max 20 words)
+4. Output one variation per line
+
+Original query: {query}
+
+Query variations:
+1."""
+        )
+
+        chain = multi_query_prompt | self.llm | StrOutputParser()
+
+        try:
+            variations_text = chain.invoke({"query": query}).strip()
+
+            # Parse variations (split by newlines, clean up)
+            variations = [line.strip() for line in variations_text.split('\n') if line.strip()]
+            # Remove numbering if present
+            variations = [line.split('. ', 1)[-1] if '. ' in line else line for line in variations]
+            # Add original query
+            all_queries = [query] + variations[:3]  # Max 4 total (original + 3 variations)
+
+            print(f"[OK] Generated {len(all_queries)-1} variations")
+            for i, q in enumerate(all_queries[1:], 1):
+                print(f"     {i}. {q}")
+
+            # Search with each query
+            all_results = {}  # Use dict to deduplicate by content
+            all_scores = {}
+
+            for q in all_queries:
+                if use_hybrid:
+                    docs, scores = self.hybrid_search(q, k=k*2, with_scores=True)
+                else:
+                    results_with_scores = self.vector_store.search_with_scores(q, k=k*2)
+                    docs, scores = [doc for doc, _ in results_with_scores], [float(score) for _, score in results_with_scores]
+
+                # Merge results (keep best score for duplicates)
+                for doc, score in zip(docs, scores):
+                    content_key = doc.page_content
+                    if content_key not in all_results or score > all_scores[content_key]:
+                        all_results[content_key] = doc
+                        all_scores[content_key] = score
+
+            # Sort by score and return top k
+            sorted_items = sorted(all_results.items(), key=lambda x: all_scores[x[0]], reverse=True)[:k]
+            final_docs = [doc for _, doc in sorted_items]
+            final_scores = [all_scores[doc.page_content] for doc in final_docs]
+
+            print(f"[OK] Multi-Query merged {len(all_results)} unique docs, returning top {len(final_docs)}")
+
+            if with_scores:
+                return final_docs, final_scores
+            return final_docs
+
+        except Exception as e:
+            print(f"[!] Multi-Query failed: {e}, falling back to regular search")
+            return self.hybrid_search(query, k=k, with_scores=with_scores) if use_hybrid else self.vector_store.search(query, k=k)
 
 
 # Global instance
