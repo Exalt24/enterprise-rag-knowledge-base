@@ -9,11 +9,6 @@ Extracts text from various document formats:
 
 Returns standardized Document objects with rich metadata.
 
-OPTIMIZATIONS IMPLEMENTED:
-1. Configurable PDF splitting (per-page vs combined)
-2. OCR for image-only pages (local environment only)
-3. Rich metadata (word count, upload date, file size, etc.)
-4. Specific exception handling (corrupted PDF, permissions, etc.)
 """
 
 from typing import List
@@ -125,7 +120,6 @@ class DocumentParser:
             upload_date = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
 
             if split_by_page:
-                # Current behavior: One document per page
                 documents = []
 
                 for page_num, page in enumerate(reader.pages):
@@ -161,7 +155,6 @@ class DocumentParser:
                 return documents
 
             else:
-                # NEW: Combine all pages into one document
                 all_text = []
                 for page_num, page in enumerate(reader.pages):
                     text = page.extract_text()
@@ -187,7 +180,7 @@ class DocumentParser:
                             "word_count": len(combined_text.split()),
                             "upload_date": upload_date,
                             "file_size_kb": round(file_stat.st_size / 1024, 2),
-                            "combined": True,  # Flag that pages were combined
+                            "combined": True,
                         },
                     )
                 ]
