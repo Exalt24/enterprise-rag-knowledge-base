@@ -5,57 +5,26 @@ Extracts text from various document formats:
 - PDF (using pypdf)
 - DOCX (using python-docx)
 - TXT, MD (plain text)
-- OCR support for scanned PDFs (local only)
 
-Returns standardized Document objects with rich metadata.
-
-OPTIMIZATIONS IMPLEMENTED:
-1. Configurable PDF splitting (per-page vs combined)
-2. OCR for image-only pages (local environment only)
-3. Rich metadata (word count, upload date, file size, etc.)
-4. Specific exception handling (corrupted PDF, permissions, etc.)
+Returns standardized Document objects with metadata.
 """
 
 from typing import List
 from pathlib import Path
-from datetime import datetime
 from pypdf import PdfReader
-from pypdf.errors import PdfReadError
 from docx import Document as DocxDocument
 from langchain_core.documents import Document
-import os
-
-# OCR support (local only - Render has 512MB RAM limit)
-try:
-    if not os.getenv("RENDER"):
-        import pytesseract
-        from PIL import Image
-        import pdf2image
-        OCR_AVAILABLE = True
-        print("[i] OCR support enabled (local environment)")
-    else:
-        OCR_AVAILABLE = False
-except ImportError:
-    OCR_AVAILABLE = False
-    if not os.getenv("RENDER"):
-        print("[!] OCR unavailable (install: pip install pytesseract pdf2image)")
 
 
 class DocumentParser:
     """
-    Parse documents and extract text content with rich metadata.
+    Parse documents and extract text content.
 
     Supports: PDF, DOCX, TXT, MD
     Returns: LangChain Document objects with metadata
-
-    Features:
-    - Configurable PDF splitting (per-page or combined)
-    - OCR for scanned/image PDFs (local only)
-    - Rich metadata (word count, upload date, file size)
-    - Specific error handling
     """
 
-    SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md'}
+    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
     @classmethod
     def is_supported(cls, file_path: str) -> bool:
@@ -73,7 +42,7 @@ class DocumentParser:
             use_ocr: Use OCR for image-only pages (local only, requires tesseract)
 
         Returns:
-            List of Document objects
+            List of Document objects (usually one per file, but PDFs can be split by page)
 
         Raises:
             ValueError: If file format not supported
@@ -93,11 +62,11 @@ class DocumentParser:
         # Route to appropriate parser
         extension = path.suffix.lower()
 
-        if extension == '.pdf':
-            return cls._parse_pdf(path, split_by_page, use_ocr)
-        elif extension == '.docx':
+        if extension == ".pdf":
+            return cls._parse_pdf(path)
+        elif extension == ".docx":
             return cls._parse_docx(path)
-        elif extension in {'.txt', '.md'}:
+        elif extension in {".txt", ".md"}:
             return cls._parse_text(path)
 
         raise ValueError(f"No parser for {extension}")
@@ -226,7 +195,7 @@ class DocumentParser:
         """
         Parse DOCX file.
 
-        Returns single Document with all content and rich metadata.
+        Returns single Document with all content.
         """
         try:
             doc = DocxDocument(str(path))
@@ -237,9 +206,6 @@ class DocumentParser:
             if not text.strip():
                 raise ValueError(f"DOCX file is empty: {path.name}")
 
-            # Rich metadata
-            file_stat = path.stat()
-
             return [
                 Document(
                     page_content=text,
@@ -248,11 +214,7 @@ class DocumentParser:
                         "file_name": path.name,
                         "file_type": "docx",
                         "paragraphs": len(doc.paragraphs),
-                        "char_count": len(text),
-                        "word_count": len(text.split()),
-                        "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                        "file_size_kb": round(file_stat.st_size / 1024, 2)
-                    }
+                    },
                 )
             ]
 
@@ -264,17 +226,14 @@ class DocumentParser:
         """
         Parse plain text file (TXT, MD).
 
-        Returns single Document with all content and rich metadata.
+        Returns single Document with all content.
         """
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, "r", encoding="utf-8") as f:
                 text = f.read()
 
             if not text.strip():
                 raise ValueError(f"Text file is empty: {path.name}")
-
-            # Rich metadata
-            file_stat = path.stat()
 
             return [
                 Document(
@@ -283,22 +242,15 @@ class DocumentParser:
                         "source": str(path),
                         "file_name": path.name,
                         "file_type": path.suffix[1:],  # Remove the dot
-                        "char_count": len(text),
-                        "word_count": len(text.split()),
-                        "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                        "file_size_kb": round(file_stat.st_size / 1024, 2)
-                    }
+                    },
                 )
             ]
 
         except UnicodeDecodeError:
             # Try different encoding
             try:
-                with open(path, 'r', encoding='latin-1') as f:
+                with open(path, "r", encoding="latin-1") as f:
                     text = f.read()
-
-                file_stat = path.stat()
-
                 return [
                     Document(
                         page_content=text,
@@ -307,11 +259,7 @@ class DocumentParser:
                             "file_name": path.name,
                             "file_type": path.suffix[1:],
                             "encoding": "latin-1",
-                            "char_count": len(text),
-                            "word_count": len(text.split()),
-                            "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-                            "file_size_kb": round(file_stat.st_size / 1024, 2)
-                        }
+                        },
                     )
                 ]
             except Exception as e:
@@ -326,7 +274,7 @@ class DocumentParser:
 # =============================================================================
 if __name__ == "__main__":
     print("=" * 70)
-    print("Document Parser Test (With Optimizations)")
+    print("Document Parser Test")
     print("=" * 70)
 
     # Test with sample text file
@@ -343,7 +291,6 @@ if __name__ == "__main__":
 
     # Create sample file
     test_file = Path("../data/test_document.txt")
-    test_file.parent.mkdir(exist_ok=True)
     test_file.write_text(test_content)
 
     # Test parser
@@ -361,10 +308,7 @@ if __name__ == "__main__":
     test_file.unlink()
 
     print("=" * 70)
-    print("[OK] Parser working with optimizations!")
+    print("[OK] Parser working!")
     print("=" * 70)
-    print("\nOptimizations enabled:")
-    print("  ✅ Configurable PDF splitting")
-    print("  ✅ Rich metadata (word count, file size, upload date)")
-    print("  ✅ Specific error handling")
-    print(f"  {'✅' if OCR_AVAILABLE else '⏸️'} OCR support (local only)")
+    print("\nNext: Test with real PDF/DOCX files")
+    print("Place sample files in data/documents/ folder")
