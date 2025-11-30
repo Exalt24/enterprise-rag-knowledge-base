@@ -24,15 +24,15 @@ class GenerationResponse(BaseModel):
     """Structured generation response with Pydantic validation"""
     answer: str = Field(..., description="Generated answer")
     query: str = Field(..., description="Original user query")
-    model_used: str = Field(..., description="LLM model name (ollama/groq/gemini)")
+    model_used: str = Field(..., description="LLM model name (ollama/groq)")
     context_length: int = Field(..., description="Length of context provided to LLM")
 
 
 class GenerationService:
     """
-    Generates answers using LLM with 3-tier fallback.
+    Generates answers using LLM with 2-tier fallback.
 
-    Priority: Ollama (local) → Groq (fast) → Gemini (reliable)
+    Priority: Ollama (local, unlimited) → Groq (cloud, fast)
     """
 
     def __init__(self):
@@ -117,9 +117,9 @@ Answer:""")
         context: str
     ) -> GenerationResponse:
         """
-        Generate answer with 3-tier LLM fallback.
+        Generate answer with 2-tier LLM fallback.
 
-        Tries: Ollama → Groq → Gemini
+        Tries: Ollama → Groq (or just Groq on Render)
 
         Args:
             query: User question
@@ -210,5 +210,4 @@ Notable projects include AutoFlow Pro (browser automation with BullMQ and Redis)
     print("=" * 70)
     print("\nFallback Strategy:")
     print("  1. Ollama (local, unlimited) - Primary")
-    print("  2. Groq (350+ tokens/sec) - Speed fallback")
-    print("  3. Gemini (generous free) - Final fallback")
+    print("  2. Groq (350+ tokens/sec) - Cloud fallback")
