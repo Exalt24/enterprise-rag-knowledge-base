@@ -17,45 +17,43 @@ from pydantic import BaseModel, Field
 # Query Endpoint Schemas
 # =============================================================================
 
+
 class QueryRequest(BaseModel):
     """Request schema for /query endpoint"""
+
     question: str = Field(
         ...,
         description="User question to answer",
         min_length=1,
         max_length=500,
-        examples=["What is RAG?", "How does semantic search work?"]
+        examples=["What is RAG?", "How does semantic search work?"],
     )
     k: Optional[int] = Field(
-        default=3,
-        description="Number of documents to retrieve",
-        ge=1,
-        le=10
+        default=3, description="Number of documents to retrieve", ge=1, le=10
     )
     include_sources: bool = Field(
-        default=True,
-        description="Include source documents in response"
+        default=True, description="Include source documents in response"
     )
     use_hybrid_search: bool = Field(
         default=True,
-        description="Use hybrid search (vector + BM25 keyword) for better accuracy"
+        description="Use hybrid search (vector + BM25 keyword) for better accuracy",
     )
     optimize_query: bool = Field(
         default=False,
-        description="Optimize query with LLM before retrieval (improves vague queries)"
+        description="Optimize query with LLM before retrieval (improves vague queries)",
     )
     use_reranking: bool = Field(
         default=False,
-        description="Rerank results with cross-encoder (most accurate, slower)"
+        description="Rerank results with cross-encoder (most accurate, slower)",
     )
     conversation_id: Optional[str] = Field(
-        default=None,
-        description="Conversation ID for multi-turn chat with memory"
+        default=None, description="Conversation ID for multi-turn chat with memory"
     )
 
 
 class Source(BaseModel):
     """Source document information"""
+
     file_name: str = Field(..., description="Source file name")
     page: Optional[int] = Field(None, description="Page number (for PDFs)")
     content_preview: str = Field(..., description="Preview of source content")
@@ -64,6 +62,7 @@ class Source(BaseModel):
 
 class QueryResponse(BaseModel):
     """Response schema for /query endpoint"""
+
     answer: str = Field(..., description="Generated answer")
     query: str = Field(..., description="Original question")
     sources: List[Source] = Field(default=[], description="Source documents")
@@ -75,8 +74,10 @@ class QueryResponse(BaseModel):
 # Ingest Endpoint Schemas
 # =============================================================================
 
+
 class IngestResponse(BaseModel):
     """Response schema for /ingest endpoint"""
+
     success: bool = Field(..., description="Whether ingestion succeeded")
     message: str = Field(..., description="Status message")
     file_name: Optional[str] = Field(None, description="Ingested file name")
@@ -88,33 +89,42 @@ class IngestResponse(BaseModel):
 # Stats Endpoint Schemas
 # =============================================================================
 
+
 class StatsResponse(BaseModel):
     """Response schema for /stats endpoint"""
+
     total_documents: int = Field(..., description="Total chunks in database")
-    collection_name: str = Field(..., description="Chroma collection name")
+    collection_name: str = Field(..., description="Collection name")
     embedding_model: str = Field(..., description="Embedding model name")
     embedding_dimension: int = Field(..., description="Vector dimension")
     llm_model: str = Field(..., description="LLM model name")
-    cache_stats: Optional[dict] = Field(None, description="Cache statistics (hits, misses, type)")
+    cache_stats: Optional[dict] = Field(
+        None, description="Cache statistics (hits, misses, type)"
+    )
 
 
 # =============================================================================
 # Health Endpoint Schemas
 # =============================================================================
 
+
 class HealthResponse(BaseModel):
     """Response schema for /health endpoint"""
+
     status: str = Field(..., description="Health status: 'healthy' or 'unhealthy'")
     ollama_connected: bool = Field(..., description="Ollama connection status")
     vector_db_connected: bool = Field(..., description="Vector DB connection status")
     total_documents: int = Field(..., description="Documents in database")
 
+
 # =============================================================================
 # File Management Endpoint Schemas
 # =============================================================================
 
+
 class DocumentInfoSchema(BaseModel):
     """Schema for document information"""
+
     file_name: str = Field(..., description="Document filename")
     file_type: str = Field(..., description="File extension")
     file_size_kb: float = Field(..., description="File size in KB")
@@ -124,6 +134,7 @@ class DocumentInfoSchema(BaseModel):
 
 class ListDocumentsResponse(BaseModel):
     """Response schema for /documents endpoint"""
+
     documents: List[DocumentInfoSchema] = Field(..., description="List of documents")
     total_documents: int = Field(..., description="Total document count")
     total_chunks: int = Field(..., description="Total chunks across all documents")
@@ -131,6 +142,7 @@ class ListDocumentsResponse(BaseModel):
 
 class DeleteDocumentResponse(BaseModel):
     """Response schema for /documents/{file_name} DELETE endpoint"""
+
     success: bool = Field(..., description="Whether deletion succeeded")
     message: str = Field(..., description="Status message")
     chunks_deleted: Optional[int] = Field(None, description="Number of chunks removed")
