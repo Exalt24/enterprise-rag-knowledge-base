@@ -53,30 +53,16 @@ except Exception as e:
     print(f"   ❌ Embeddings error: {e}\n")
     exit(1)
 
-# Test 3: Chroma Vector Database
-print("3️⃣ Testing Chroma vector database...")
+# Test 3: Qdrant Vector Database
+print("3️⃣ Testing Qdrant Cloud connection...")
 try:
-    from langchain_community.vectorstores import Chroma
+    from app.services.vector_store import vector_store
 
-    # Sample documents
-    sample_docs = [
-        "RAG stands for Retrieval-Augmented Generation.",
-        "Vector databases store embeddings for semantic search.",
-        "LangChain is a framework for building LLM applications."
-    ]
-
-    # Create vector store
-    vectorstore = Chroma.from_texts(
-        texts=sample_docs,
-        embedding=embeddings,
-        persist_directory="./data/test_chroma"
-    )
-
-    print(f"   ✅ Created vector store with {len(sample_docs)} documents\n")
-
-    # Test search
-    results = vectorstore.similarity_search("What is RAG?", k=1)
-    print(f"   ✅ Search result: {results[0].page_content}\n")
+    # Test connection and get stats
+    stats = vector_store.get_stats()
+    print(f"   ✅ Connected to Qdrant Cloud")
+    print(f"   ✅ Collection: {stats['collection_name']}")
+    print(f"   ✅ Documents: {stats['total_documents']}\n")
 
 except Exception as e:
     print(f"   ❌ Chroma error: {e}\n")
