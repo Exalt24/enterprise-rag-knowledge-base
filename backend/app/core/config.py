@@ -120,7 +120,7 @@ def print_config():
     print("=" * 70)
     print(f"Ollama URL: {settings.ollama_base_url}")
     print(f"Ollama Model: {settings.ollama_model}")
-    print(f"Chroma DB: {settings.chroma_persist_dir}")
+    print(f"Vector DB: Qdrant Cloud")
     print(f"Embedding Model: {settings.embedding_model}")
     print(f"Chunk Size: {settings.chunk_size} tokens")
     print(f"Chunk Overlap: {settings.chunk_overlap} tokens")
