@@ -1,0 +1,42 @@
+# Lightweight requirements for Render (512MB RAM, CPU-only)
+# Install CPU-only PyTorch to avoid 700MB+ CUDA bloat
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Core Framework
+fastapi==0.122.0
+uvicorn[standard]==0.38.0
+pydantic==2.12.5
+pydantic-settings==2.12.0
+python-multipart==0.0.20
+python-dotenv==1.2.1
+
+# LangChain
+langchain==1.1.0
+langchain-core==1.1.0
+langchain-community==0.4.1
+langchain-groq==1.1.0
+langchain-ollama==1.0.0
+langchain-text-splitters==1.0.0
+
+# Qdrant (remote vector storage)
+qdrant-client==1.16.1
+langchain-qdrant==1.1.0
+
+# Embeddings (local Sentence Transformers with CPU-only PyTorch)
+sentence-transformers==5.1.2
+torch  # CPU-only via extra-index-url above
+transformers==4.57.3
+
+# Search & Retrieval
+rank-bm25==0.2.2
+
+# Document Processing
+pypdf==6.4.0
+python-docx==1.2.0
+
+# Redis
+redis==7.1.0
+
+# Utilities
+requests==2.32.5
