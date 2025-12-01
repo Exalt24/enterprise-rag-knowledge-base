@@ -1,7 +1,7 @@
 # Enterprise RAG Backend - Production Docker Image
 #
 # Multi-stage build for optimized image size
-# Python 3.13 + FastAPI + LangChain + Chroma
+# Python 3.13 + FastAPI + LangChain + Qdrant Cloud
 
 # =============================================================================
 # Stage 1: Builder
@@ -42,8 +42,8 @@ COPY --from=builder /root/.local /root/.local
 COPY app /app/app
 COPY tests /app/tests
 
-# Create data directories
-RUN mkdir -p /app/data/chroma /app/data/documents
+# Create data directory for uploaded documents
+RUN mkdir -p /app/data/documents
 
 # Set Python path
 ENV PATH=/root/.local/bin:$PATH
