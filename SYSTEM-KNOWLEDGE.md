@@ -97,9 +97,9 @@ User uploads resume.pdf
 └───────────────────────────────────────────────────────┘
         ↓
 ┌───────────────────────────────────────────────────────┐
-│ STEP 4: STORAGE (vector_store.py → Chroma)           │
+│ STEP 4: STORAGE (vector_store.py → Qdrant Cloud)     │
 ├───────────────────────────────────────────────────────┤
-│ Store in Chroma database:                            │
+│ Store in Qdrant Cloud:                                │
 │                                                       │
 │ SQLite (chroma.sqlite3):                             │
 │ ├─ Document text                                     │
@@ -140,7 +140,7 @@ User asks: "What are Daniel's React skills?"
 ├───────────────────────────────────────────────────────┤
 │ A) Basic Vector Search (retrieval.py):               │
 │    - Embed query → [0.12, -0.34, ...]                │
-│    - Search Chroma HNSW index                        │
+│    - Search Qdrant Cloud (cosine similarity)          │
 │    - Return top-k similar docs                       │
 │    - Accuracy: ~40%                                  │
 │                                                       │
@@ -276,7 +276,7 @@ User asks: "What are Daniel's React skills?"
 - PostgreSQL: Keyword matching (exact)
 - Vector DB: Semantic search (by meaning)
 
-**Chroma internals:**
+**Qdrant Cloud internals:**
 
 ```
 Storage:
