@@ -61,11 +61,11 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 
 **Embeddings:**
 - Sentence Transformers (all-MiniLM-L6-v2, 384-dim)
-- Local: sentence-transformers library
-- Render: HuggingFace Inference API (0MB footprint)
+- Local Sentence Transformers everywhere (dev AND production)
+- Qdrant Cloud stores vectors remotely (no local storage needed)
 
 **Vector Database:**
-- Chroma (persistent storage, HNSW indexing)
+- Qdrant Cloud (remote storage, 2x faster than Chroma)
 - Alternative options: Qdrant (2x faster), pgvector (PostgreSQL)
 
 **Retrieval:**
@@ -331,7 +331,7 @@ enterprise-rag/
 │   │   │   ├── chunking.py            # Text splitting (500/50)
 │   │   │   ├── embeddings.py          # Local embeddings
 │   │   │   ├── embeddings_hf_api.py   # Cloud embeddings (Render)
-│   │   │   ├── vector_store.py        # Chroma database
+│   │   │   ├── vector_store.py        # Qdrant Cloud client
 │   │   │   ├── retrieval.py           # Basic retrieval
 │   │   │   ├── advanced_retrieval.py  # Hybrid, HyDE, Multi-Query, Reranking
 │   │   │   ├── generation.py          # LLM generation (Ollama/Groq)
@@ -342,7 +342,7 @@ enterprise-rag/
 │   │   │   └── ingestion.py           # Document ingestion pipeline
 │   │   └── main.py                    # FastAPI app
 │   ├── data/
-│   │   ├── chroma/                    # Vector DB (persistent)
+│   │   ├── documents/                 # Uploaded files (Qdrant stores vectors remotely)
 │   │   └── documents/                 # Uploaded files
 │   ├── tests/
 │   │   ├── test_ingestion.py          # Ingestion pipeline tests
@@ -399,23 +399,37 @@ python tests/test_rag_evaluation.py
 
 ## Key Technical Decisions
 
-### Why Chroma?
-- Easy setup (zero config)
-- Persistent storage
-- Good for prototyping
+### Why Qdrant Cloud?
 
-**For production, consider:**
-- Qdrant (2x faster)
-- pgvector (PostgreSQL integration)
-- Milvus (enterprise-scale)
+**Upgraded from Chroma for:**
+- **2x faster performance** (benchmarked)
+- **Better filtering** (advanced metadata queries)
+- **Remote storage** (no local disk needed on Render)
+- **Production-grade** (used by enterprises)
+- **Free tier:** 1GB storage, generous API limits
 
-### Why Sentence Transformers (Local)?
-- Free & unlimited
-- No API costs
-- ~500 embeddings/sec on CPU
-- Private (data stays local)
+**Why not Chroma:**
+- Local storage needed (problematic on Render's ephemeral filesystem)
+- Slower performance
+- Limited filtering capabilities
 
-**Trade-off:** 200MB RAM (solved by using HuggingFace API on Render)
+**Considered alternatives:**
+- **pgvector:** PostgreSQL extension (will try in Project 3)
+- **Milvus:** Enterprise-scale (overkill for portfolio)
+
+### Why Local Sentence Transformers (Not HuggingFace API)?
+
+**Upgraded strategy** - Use local embeddings everywhere:
+- **Reliable:** No API timeouts (HF API had 504 errors)
+- **Fast:** ~500 embeddings/sec on CPU
+- **Free:** No API costs or rate limits
+- **Private:** Data stays on your server
+- **Works with Qdrant Cloud:** 200MB RAM + remote vector storage = ~350MB total (under 512MB limit!)
+
+**Why we removed HuggingFace Inference API:**
+- Unreliable (frequent timeouts)
+- Added complexity (different code paths for dev/prod)
+- Unnecessary with Qdrant Cloud (remote storage solved memory issue)
 
 ### Why Ollama + Groq (No Gemini)?
 - **Ollama:** Local, unlimited, private (development)
@@ -517,7 +531,7 @@ Each service = ONE responsibility
 ├─ document_parser: Parse documents
 ├─ chunking: Split text
 ├─ embeddings: Generate vectors
-├─ vector_store: Manage Chroma DB
+├─ vector_store: Manage Qdrant Cloud
 ├─ retrieval: Find relevant docs
 ├─ advanced_retrieval: Hybrid, HyDE, Multi-Query, Reranking
 ├─ generation: LLM answer creation
@@ -527,7 +541,7 @@ Each service = ONE responsibility
 
 **Data Flow:**
 ```
-Upload: PDF → Parse → Chunk → Embed → Store (Chroma)
+Upload: PDF → Parse → Chunk → Embed → Store (Qdrant Cloud)
 Query: Question → Cache check → Retrieve → Generate → Cache → Answer
 ```
 
@@ -574,7 +588,7 @@ REDIS_MAX_CONNECTIONS=10           # Connection pool (default: 10)
 |-----------|-----------|---------------------|
 | LLM | Ollama (free) | Groq API (free tier) |
 | Embeddings | Sentence Transformers (local) | HuggingFace API (free tier) |
-| Vector DB | Chroma (local) | Chroma (persistent disk) |
+| Vector DB | Qdrant Cloud | Qdrant Cloud (remote) |
 | Cache | Redis Cloud (free tier) | Redis Cloud (free tier) |
 | Backend Hosting | N/A | Render (free 512MB) |
 | Frontend Hosting | N/A | Vercel (free) |
@@ -652,7 +666,7 @@ Built with 100% free and open-source technologies, demonstrating cost-effective 
 
 **Tech demonstrated:**
 - RAG architecture (retrieval-augmented generation)
-- Vector databases (Chroma, HNSW algorithm)
+- Vector databases (Qdrant Cloud, cosine similarity)
 - Advanced retrieval (Hybrid, HyDE, Multi-Query, Reranking)
 - LLM integration (LangChain, Ollama, Groq)
 - Full-stack development (FastAPI + Next.js)
