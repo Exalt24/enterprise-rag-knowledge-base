@@ -42,7 +42,7 @@ class FileManagementService:
 
     def __init__(self):
         self.vector_store = vector_store
-        self.documents_dir = Path(settings.chroma_persist_dir).parent / "documents"
+        self.documents_dir = Path("./data/documents")
 
     def list_documents(self) -> List[DocumentInfo]:
         """
