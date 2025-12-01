@@ -166,6 +166,32 @@ class VectorStoreService:
         )
         print(f"[OK] Deleted {len(ids)} documents")
 
+    def get_all_documents(self) -> List[Document]:
+        """Get all documents from Qdrant.
+
+        Returns:
+            List of all Document objects with page_content and metadata
+        """
+        from qdrant_client.models import ScrollRequest
+
+        all_docs = []
+        scroll_result = self._client.scroll(
+            collection_name=settings.qdrant_collection,
+            limit=1000,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        for point in scroll_result[0]:
+            all_docs.append(
+                Document(
+                    page_content=point.payload.get("page_content", ""),
+                    metadata=point.payload.get("metadata", {})
+                )
+            )
+
+        return all_docs
+
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics"""
         collection_info = self._client.get_collection(settings.qdrant_collection)

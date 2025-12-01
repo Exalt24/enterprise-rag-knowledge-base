@@ -63,19 +63,17 @@ class FileManagementService:
         for ext in supported_extensions:
             files.extend(self.documents_dir.glob(f"*{ext}"))
 
-        # Get chunk counts from vector DB
-        all_docs_result = self.vector_store._vectorstore.get()
-        total_chunks = len(all_docs_result['documents']) if all_docs_result['documents'] else 0
+        # Get all documents from vector DB
+        all_docs = self.vector_store.get_all_documents()
+        total_chunks = len(all_docs)
 
         # Build document info
         for file_path in files:
             # Count chunks for this file
-            chunk_count = 0
-
-            if all_docs_result['metadatas']:
-                for metadata in all_docs_result['metadatas']:
-                    if metadata.get('file_name') == file_path.name:
-                        chunk_count += 1
+            chunk_count = sum(
+                1 for doc in all_docs
+                if doc.metadata.get('file_name') == file_path.name
+            )
 
             # Get file stats
             stat = file_path.stat()
@@ -115,22 +113,26 @@ class FileManagementService:
 
         try:
             # Delete from vector database (all chunks with this file_name)
-            all_docs_result = self.vector_store._vectorstore.get()
+            # For Qdrant, use filter-based deletion
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-            if all_docs_result['metadatas']:
-                # Find IDs of chunks belonging to this file
-                ids_to_delete = []
-
-                for i, metadata in enumerate(all_docs_result['metadatas']):
-                    if metadata.get('file_name') == file_name:
-                        ids_to_delete.append(all_docs_result['ids'][i])
-
-                # Delete chunks
-                if ids_to_delete:
-                    self.vector_store.delete_documents(ids_to_delete)
-
-                chunks_deleted = len(ids_to_delete)
-            else:
+            try:
+                # Delete points with matching file_name metadata
+                self.vector_store._client.delete(
+                    collection_name=settings.qdrant_collection,
+                    points_selector=Filter(
+                        must=[
+                            FieldCondition(
+                                key="metadata.file_name",
+                                match=MatchValue(value=file_name)
+                            )
+                        ]
+                    )
+                )
+                # Note: Can't easily get count of deleted, assume chunks_deleted based on list
+                all_docs = self.vector_store.get_all_documents()
+                chunks_deleted = sum(1 for doc in all_docs if doc.metadata.get('file_name') == file_name)
+            except:
                 chunks_deleted = 0
 
             # Delete file from filesystem
@@ -164,17 +166,16 @@ class FileManagementService:
             return None
 
         # Get chunks for this document
-        all_docs_result = self.vector_store._vectorstore.get()
+        all_docs = self.vector_store.get_all_documents()
 
         chunks = []
-        if all_docs_result['metadatas']:
-            for i, metadata in enumerate(all_docs_result['metadatas']):
-                if metadata.get('file_name') == file_name:
-                    chunks.append({
-                        "chunk_index": metadata.get("chunk_index", 0),
-                        "content_preview": all_docs_result['documents'][i][:100] + "...",
-                        "page": metadata.get("page")
-                    })
+        for doc in all_docs:
+            if doc.metadata.get('file_name') == file_name:
+                chunks.append({
+                    "chunk_index": doc.metadata.get("chunk_index", 0),
+                    "content_preview": doc.page_content[:100] + "...",
+                    "page": doc.metadata.get("page")
+                })
 
         stat = file_path.stat()
 
