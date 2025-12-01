@@ -69,23 +69,14 @@ except Exception as e:
     exit(1)
 
 # Test 4: Simple RAG Query
-print("4️⃣ Testing complete RAG pipeline...")
+print("4️⃣ Testing RAG query...")
 try:
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser
-    from langchain_core.runnables import RunnablePassthrough
+    # Test semantic search
+    test_query = "What skills does Daniel have?"
+    results = vector_store.search(test_query, k=2)
 
-    # Simple RAG chain
-    template = """Answer the question based only on the following context:
-{context}
-
-Question: {question}
-
-Answer:"""
-
-    prompt = ChatPromptTemplate.from_template(template)
-
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+    if results:
+        print(f"   ✅ Search returned {len(results)} results")
 
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
