@@ -93,20 +93,14 @@ class AdvancedRetrieval:
         if self._bm25_retriever is None or current_count != self._bm25_doc_count:
             print(f"[i] Building BM25 index for {current_count} documents...")
 
-            # Get all documents from vector store
-            all_docs_result = self.vector_store._vectorstore.get()
-            all_docs = [
-                Document(page_content=content, metadata=metadata)
-                for content, metadata in zip(
-                    all_docs_result["documents"], all_docs_result["metadatas"]
-                )
-            ]
+            # Get all documents for BM25 indexing
+            all_docs = self.vector_store.get_all_documents()
 
             # Build BM25 retriever
             self._bm25_retriever = BM25Retriever.from_documents(all_docs)
             self._bm25_doc_count = current_count
 
-            print(f"[OK] BM25 index ready (cached for reuse)")
+            print(f"[OK] BM25 index ready with {len(all_docs)} docs (cached for reuse)")
         else:
             print(f"[i] Reusing cached BM25 index ({current_count} docs)")
 
