@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     print("=" * 70)
     print(f"LLM Model: {settings.ollama_model}")
     print(f"Embedding Model: {settings.embedding_model}")
-    print(f"Vector DB: {settings.chroma_persist_dir}")
+    print(f"Vector DB: Qdrant Cloud")
     print("=" * 70)
     print("\nAPI Ready!")
     print("  - Docs: http://localhost:8001/docs")
