@@ -33,15 +33,18 @@ class Settings(BaseSettings):
         default=None,
         description="Groq API key for fast inference (required for Render deployment)"
     )
-    huggingfacehub_api_token: Optional[str] = Field(
-        default=None,
-        description="HuggingFace API token for cloud embeddings (required for Render deployment)"
+    # Qdrant Cloud Vector Database
+    qdrant_url: str = Field(
+        default="",
+        description="Qdrant Cloud URL"
     )
-
-    # Vector Database
-    chroma_persist_dir: str = Field(
-        default="./data/chroma",
-        description="Chroma database storage path"
+    qdrant_api_key: str = Field(
+        default="",
+        description="Qdrant Cloud API key"
+    )
+    qdrant_collection: str = Field(
+        default="enterprise_rag",
+        description="Qdrant collection name"
     )
 
     # Redis Cache
