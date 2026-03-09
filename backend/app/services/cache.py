@@ -114,7 +114,7 @@ class CacheService:
         # Combine question with relevant options
         cache_str = f"{question}|{options.get('k', 3)}|{options.get('use_hybrid_search', True)}|{options.get('use_reranking', False)}"
 
-        return hashlib.md5(cache_str.encode()).hexdigest()
+        return f"rag:{hashlib.md5(cache_str.encode()).hexdigest()}"
 
     def get(self, question: str, options: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """
