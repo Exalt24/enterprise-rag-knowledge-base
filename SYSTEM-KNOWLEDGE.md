@@ -674,8 +674,7 @@ backend/app/
 └── services/
     ├── document_parser.py      PDF/DOCX/TXT → text + metadata
     ├── chunking.py             Text → 500-char chunks (50 overlap)
-    ├── embeddings.py           Text → 384-dim vectors (local)
-    ├── embeddings_hf_api.py    Text → vectors (cloud API, Render)
+    ├── embeddings.py           Text → 384-dim vectors (local, all-MiniLM-L6-v2)
     ├── vector_store.py         Chroma database wrapper
     │
     ├── retrieval.py            Basic vector search + formatting
@@ -716,7 +715,7 @@ backend/app/
 - Private (data stays local)
 - Fast (500 emb/sec on CPU)
 
-**Trade-off:** 200MB RAM (solution: Use HF API on Render)
+**Trade-off:** 200MB RAM (fits under Render's 512MB limit since Qdrant Cloud stores the vectors remotely)
 
 ---
 
@@ -807,7 +806,7 @@ backend/app/
 
 "Three main challenges:
 
-**1. Memory constraints on Render (512MB):** Couldn't fit local embedding models (200MB). Solved by using HuggingFace Inference API on production while keeping local models for development, with environment detection to switch automatically.
+**1. Memory constraints on Render (512MB):** A local embedding model plus a local vector store didn't fit. Solved it by moving vector storage to Qdrant Cloud so the vectors live remotely, which let me keep the same local all-MiniLM-L6-v2 embedding model (~200MB) running on production too. Local embeddings plus remote Qdrant come to about 350MB total, and installing CPU-only PyTorch kept the CUDA bloat out.
 
 **2. Retrieval accuracy:** Started at 40% with basic vector search. Improved to 60% with hybrid search, then 75% with cross-encoder reranking. Implemented HyDE and multi-query for 85%+ accuracy.
 
@@ -846,8 +845,7 @@ backend/app/
 
 **Embeddings:**
 
-- Sentence Transformers (local)
-- HuggingFace Inference API (Render)
+- Sentence Transformers (local everywhere, dev and production)
 - Model: all-MiniLM-L6-v2 (384-dim)
 
 **LLMs:**
@@ -961,7 +959,7 @@ backend/app/
 
 **After (what you can say):**
 
-"Built production-ready RAG knowledge base achieving 85%+ retrieval accuracy with advanced techniques including HyDE, multi-query retrieval, hybrid search (vector + BM25), and cross-encoder reranking. Optimized for 512MB RAM using cloud APIs (HuggingFace Inference, Groq) while maintaining local development with Ollama. Implemented Redis caching (100x speedup), BM25 index caching (250x speedup), batch processing (11x speedup), and sliding window rate limiting. Full-stack deployment on Render + Vercel with 100% system reliability across comprehensive evaluation."
+"Built production-ready RAG knowledge base achieving 85%+ retrieval accuracy with advanced techniques including HyDE, multi-query retrieval, hybrid search (vector + BM25), and cross-encoder reranking. Optimized for 512MB RAM by running local all-MiniLM-L6-v2 embeddings with vectors stored remotely on Qdrant Cloud and Groq for cloud LLM inference, while keeping Ollama for local development. Implemented Redis caching (100x speedup), BM25 index caching (250x speedup), batch processing (11x speedup), and sliding window rate limiting. Full-stack deployment on Render + Vercel with 100% system reliability across comprehensive evaluation."
 
 **Tech depth demonstrated:**
 
