@@ -118,9 +118,9 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 - Connection pooling: 20-30% faster Redis operations
 
 **Deployment Optimized for Free Tier:**
-- Render backend: 512MB RAM (uses cloud APIs)
+- Render backend: 512MB RAM (Groq for LLM, local embeddings)
 - Redis Cloud: Persistent cache
-- HuggingFace Inference API: 0MB embedding footprint
+- Local embeddings + Qdrant Cloud: ~350MB total (fits under 512MB)
 
 ---
 
@@ -153,8 +153,8 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your API keys:
 # - GROQ_API_KEY (required for Render, optional for local)
+# - QDRANT_URL + QDRANT_API_KEY (required - free cluster at cloud.qdrant.io)
 # - REDIS_URL (optional - for caching)
-# - HUGGINGFACEHUB_API_TOKEN (required for Render)
 
 # Test setup
 python test_setup.py
@@ -329,8 +329,7 @@ enterprise-rag/
 │   │   ├── services/
 │   │   │   ├── document_parser.py     # PDF/DOCX/TXT parsing (+ OCR)
 │   │   │   ├── chunking.py            # Text splitting (500/50)
-│   │   │   ├── embeddings.py          # Local embeddings
-│   │   │   ├── embeddings_hf_api.py   # Cloud embeddings (Render)
+│   │   │   ├── embeddings.py          # Local embeddings (all-MiniLM-L6-v2)
 │   │   │   ├── vector_store.py        # Qdrant Cloud client
 │   │   │   ├── retrieval.py           # Basic retrieval
 │   │   │   ├── advanced_retrieval.py  # Hybrid, HyDE, Multi-Query, Reranking
@@ -342,8 +341,7 @@ enterprise-rag/
 │   │   │   └── ingestion.py           # Document ingestion pipeline
 │   │   └── main.py                    # FastAPI app
 │   ├── data/
-│   │   ├── documents/                 # Uploaded files (Qdrant stores vectors remotely)
-│   │   └── documents/                 # Uploaded files
+│   │   └── documents/                 # Uploaded files (Qdrant stores vectors remotely)
 │   ├── tests/
 │   │   ├── test_ingestion.py          # Ingestion pipeline tests
 │   │   ├── test_rag.py                # RAG query tests
@@ -504,7 +502,8 @@ docker-compose down
    ```
    RENDER=true
    GROQ_API_KEY=your_groq_key
-   HUGGINGFACEHUB_API_TOKEN=your_hf_token
+   QDRANT_URL=your_qdrant_cloud_url
+   QDRANT_API_KEY=your_qdrant_api_key
    REDIS_URL=your_redis_cloud_url
    ```
 
@@ -565,7 +564,8 @@ OLLAMA_MODEL=llama3
 ```bash
 RENDER=true
 GROQ_API_KEY=gsk_your_key_here
-HUGGINGFACEHUB_API_TOKEN=hf_your_token_here
+QDRANT_URL=https://your-cluster.cloud.qdrant.io
+QDRANT_API_KEY=your_qdrant_api_key
 REDIS_URL=redis://your_redis_url
 ```
 
@@ -587,7 +587,7 @@ REDIS_MAX_CONNECTIONS=10           # Connection pool (default: 10)
 | Component | Local Dev | Production (Render) |
 |-----------|-----------|---------------------|
 | LLM | Ollama (free) | Groq API (free tier) |
-| Embeddings | Sentence Transformers (local) | HuggingFace API (free tier) |
+| Embeddings | Sentence Transformers (local) | Sentence Transformers (local) |
 | Vector DB | Qdrant Cloud | Qdrant Cloud (remote) |
 | Cache | Redis Cloud (free tier) | Redis Cloud (free tier) |
 | Backend Hosting | N/A | Render (free 512MB) |
