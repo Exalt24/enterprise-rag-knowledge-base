@@ -99,18 +99,17 @@ User uploads resume.pdf
 ┌───────────────────────────────────────────────────────┐
 │ STEP 4: STORAGE (vector_store.py → Qdrant Cloud)     │
 ├───────────────────────────────────────────────────────┤
-│ Store in Qdrant Cloud:                                │
+│ Store in Qdrant Cloud (remote, via API):              │
 │                                                       │
-│ SQLite (chroma.sqlite3):                             │
-│ ├─ Document text                                     │
-│ ├─ Metadata (file_name, page, etc)                   │
-│ └─ Links to binary files                             │
+│ Each chunk becomes a point:                           │
+│ ├─ id: unique point ID                                │
+│ ├─ vector: 384-float embedding                        │
+│ └─ payload: document text + metadata                  │
 │                                                       │
-│ Binary files (*.bin):                                │
-│ ├─ data_level0.bin: 384-float vectors                │
-│ └─ link_lists.bin: HNSW search index                 │
+│ Vectors live in the managed cluster,                  │
+│ no local disk needed on Render                        │
 │                                                       │
-│ HNSW index built for O(log n) search speed           │
+│ HNSW index built for O(log n) search speed            │
 └───────────────────────────────────────────────────────┘
         ↓
     ✅ PDF is now searchable!
@@ -279,9 +278,9 @@ User asks: "What are Daniel's React skills?"
 **Qdrant Cloud internals:**
 
 ```
-Storage:
-├─ chroma.sqlite3: Metadata + text (364KB)
-└─ *.bin files: Vectors + HNSW index
+Storage (managed cluster, remote):
+├─ Points: id + 384-float vector + payload (text/metadata)
+└─ HNSW index kept server-side, reached over the API
 
 HNSW Algorithm:
 ├─ Hierarchical graph structure
@@ -521,7 +520,7 @@ store2 = VectorStore()  # Returns SAME instance
 
 **Used in:**
 
-- vector_store.py (load Chroma once)
+- vector_store.py (init Qdrant client once)
 - embeddings.py (load model once)
 - cache.py (one Redis connection)
 
@@ -675,7 +674,7 @@ backend/app/
     ├── document_parser.py      PDF/DOCX/TXT → text + metadata
     ├── chunking.py             Text → 500-char chunks (50 overlap)
     ├── embeddings.py           Text → 384-dim vectors (local, all-MiniLM-L6-v2)
-    ├── vector_store.py         Chroma database wrapper
+    ├── vector_store.py         Qdrant Cloud client wrapper
     │
     ├── retrieval.py            Basic vector search + formatting
     ├── advanced_retrieval.py   Hybrid, HyDE, Multi-Query, reranking
@@ -691,20 +690,22 @@ backend/app/
 
 ## 🎯 KEY TECHNICAL DECISIONS
 
-### **1. Why Chroma?**
+### **1. Why Qdrant Cloud (migrated from Chroma)?**
 
-- Easy setup (zero config)
-- Persistent storage (survives restarts)
-- Good for prototyping
-- Popular (good for portfolio visibility)
+Started on Chroma because it was zero-config and easy to prototype, but its local file storage broke on Render's ephemeral filesystem, so I migrated to Qdrant Cloud:
 
-**Better alternatives for production:**
+- Remote storage (no local disk needed on Render)
+- 2x faster than Chroma (benchmarked)
+- Better metadata filtering
+- Production-grade (used by enterprises)
+- Free tier: 1GB storage
 
-- Qdrant: 2x faster
+**Other options considered:**
+
 - pgvector: PostgreSQL integration
-- Milvus: Enterprise-scale
+- Milvus: Enterprise-scale (overkill for a portfolio project)
 
-**Verdict:** Keep Chroma for Project 1, use Qdrant for Project 2
+**Verdict:** Qdrant Cloud in production; Chroma was only the original prototype store
 
 ---
 
@@ -784,52 +785,6 @@ backend/app/
 
 ---
 
-## 🎓 INTERVIEW TALKING POINTS
-
-### **"Walk me through your RAG system"**
-
-"I built a production-ready RAG system with advanced retrieval techniques:
-
-**Architecture:** FastAPI backend with LangChain orchestration. Documents flow through parsing, chunking (500 chars with 50 overlap using RecursiveCharacterTextSplitter), embedding generation (Sentence Transformers, 384 dimensions), and storage in Chroma vector database with HNSW indexing.
-
-**Retrieval:** I implemented 5 strategies - basic vector search, hybrid search combining vector similarity with BM25 keyword matching (70/30 weighted), HyDE for better query-document matching, multi-query with LLM-generated variations, and cross-encoder reranking. This achieves 85%+ accuracy compared to 40% with basic vector search.
-
-**Generation:** 2-tier LLM fallback (Ollama local, Groq cloud) with prompt engineering rules to prevent hallucination and ensure source citation.
-
-**Production features:** Redis caching (100x speedup on repeated queries), rate limiting with sliding window algorithm, BM25 index caching (250x speedup), and comprehensive error handling.
-
-**Performance:** Sub-50ms search on thousands of documents, 67.7% retrieval accuracy tested, 100% system reliability across evaluation queries."
-
----
-
-### **"What challenges did you face?"**
-
-"Three main challenges:
-
-**1. Memory constraints on Render (512MB):** A local embedding model plus a local vector store didn't fit. Solved it by moving vector storage to Qdrant Cloud so the vectors live remotely, which let me keep the same local all-MiniLM-L6-v2 embedding model (~200MB) running on production too. Local embeddings plus remote Qdrant come to about 350MB total, and installing CPU-only PyTorch kept the CUDA bloat out.
-
-**2. Retrieval accuracy:** Started at 40% with basic vector search. Improved to 60% with hybrid search, then 75% with cross-encoder reranking. Implemented HyDE and multi-query for 85%+ accuracy.
-
-**3. Performance optimization:** BM25 was rebuilding index on every query (2.5s overhead for large datasets). Implemented caching pattern to build once and reuse, achieving 250x speedup on repeated queries."
-
----
-
-### **"How would you scale this?"**
-
-"Current bottleneck is single-instance deployment. To scale:
-
-**1. Horizontal scaling:** Multiple FastAPI instances behind load balancer. Redis cache already supports this (shared across instances).
-
-**2. Vector DB:** Move from local Chroma to managed Qdrant or Pinecone for multi-instance access and better performance (2x faster).
-
-**3. Async operations:** Make retrieval and generation async using FastAPI's native support. Could run in parallel for faster response.
-
-**4. Streaming responses:** Stream LLM output to reduce perceived latency.
-
-**5. Monitoring:** Add Prometheus metrics, distributed tracing with LangSmith, and alerting for production observability."
-
----
-
 ## 🛠️ TECHNOLOGY STACK
 
 **Backend:**
@@ -840,7 +795,7 @@ backend/app/
 
 **Vector Database:**
 
-- Chroma (local/persistent)
+- Qdrant Cloud (remote, managed)
 - HNSW indexing (fast search)
 
 **Embeddings:**
@@ -907,71 +862,3 @@ backend/app/
 - Environment detection (dev vs prod)
 - Graceful degradation (fallbacks everywhere)
 - Caching strategy (Redis with fallback)
-
----
-
-## 🎉 WHAT YOU BUILT
-
-**A complete, production-ready RAG system with:**
-
-**Core RAG:**
-
-- ✅ Multi-format document ingestion (PDF, DOCX, TXT, MD)
-- ✅ Intelligent chunking (500/50 with overlap)
-- ✅ Vector embeddings (384-dim, normalized)
-- ✅ Semantic search (Chroma + HNSW)
-- ✅ LLM generation (Ollama/Groq with fallback)
-
-**Advanced Features:**
-
-- ✅ Hybrid search (Vector 70% + BM25 30%)
-- ✅ Cross-encoder reranking (80-85% accuracy)
-- ✅ HyDE (hypothetical document embeddings)
-- ✅ Multi-query retrieval (query variations)
-- ✅ Query optimization (LLM-powered expansion)
-- ✅ OCR support (scanned PDFs, local only)
-- ✅ Rich metadata (word count, upload date, file size)
-
-**Production Features:**
-
-- ✅ Redis caching (100x speedup)
-- ✅ Rate limiting (sliding window, per-IP)
-- ✅ Security (path traversal protection, file size limits)
-- ✅ BM25 index caching (250x speedup)
-- ✅ Connection pooling (30% speedup)
-- ✅ Batch processing (11x speedup)
-- ✅ Health monitoring
-- ✅ Conversation memory (multi-turn chat)
-- ✅ File management (list, delete documents)
-
-**Deployment:**
-
-- ✅ Environment-aware (local vs Render)
-- ✅ Docker containerization
-- ✅ CI/CD (auto-deploy on git push)
-- ✅ Free tier optimization (512MB RAM)
-
----
-
-## 💼 PORTFOLIO IMPACT
-
-**Before:** "Built a RAG system"
-
-**After (what you can say):**
-
-"Built production-ready RAG knowledge base achieving 85%+ retrieval accuracy with advanced techniques including HyDE, multi-query retrieval, hybrid search (vector + BM25), and cross-encoder reranking. Optimized for 512MB RAM by running local all-MiniLM-L6-v2 embeddings with vectors stored remotely on Qdrant Cloud and Groq for cloud LLM inference, while keeping Ollama for local development. Implemented Redis caching (100x speedup), BM25 index caching (250x speedup), batch processing (11x speedup), and sliding window rate limiting. Full-stack deployment on Render + Vercel with 100% system reliability across comprehensive evaluation."
-
-**Tech depth demonstrated:**
-
-- Vector databases (Chroma, HNSW algorithm)
-- Embeddings (Sentence Transformers, 384-dim)
-- RAG architecture (retrieval + generation)
-- Advanced retrieval (5 different strategies)
-- LLM integration (LangChain, prompt engineering)
-- Production patterns (caching, pooling, fallbacks)
-- Performance optimization (250x speedups achieved)
-- Security (rate limiting, input validation)
-
-**This is NOT an API wrapper - you built the RAG system from scratch!**
-
----
