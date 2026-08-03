@@ -97,6 +97,15 @@ class Settings(BaseSettings):
         description="Maximum file upload size in MB"
     )
 
+    ingest_batch_size: int = Field(
+        default=16,
+        ge=1,
+        description=(
+            "Chunks embedded and upserted per batch during ingestion. Bounds peak memory so "
+            "large files don't OOM small instances (production runs on a 512Mi box)."
+        )
+    )
+
     # Redis Connection Pool
     redis_max_connections: int = Field(
         default=10,
