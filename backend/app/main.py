@@ -21,11 +21,13 @@ Then visit:
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.api.routes import router
 from app.core.config import settings
 from app.core.rate_limiter import RateLimitMiddleware
+from app.services.vector_store import VectorStoreUnavailable
 
 
 # =============================================================================
@@ -82,6 +84,25 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router, prefix="/api", tags=["RAG"])
+
+
+@app.exception_handler(VectorStoreUnavailable)
+async def vector_store_unavailable_handler(request: Request, exc: VectorStoreUnavailable):
+    """
+    Report a missing vector store as 503, not 500.
+
+    503 tells the caller this is an upstream dependency that may come back, which is the
+    honest description and lets clients retry sensibly. A 500 would imply a bug in the
+    request. /health stays reachable so the outage is diagnosable.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "vector_store_unavailable",
+            "detail": str(exc),
+            "hint": "Retrieval is offline. GET /api/health for current status.",
+        },
+    )
 
 
 # =============================================================================
