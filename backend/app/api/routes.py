@@ -9,8 +9,14 @@ REST endpoints for the RAG system:
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from pathlib import Path
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
+import json
 import shutil
+import time
+import uuid
 from app.api.schemas import (
     QueryRequest,
     QueryResponse,
@@ -27,6 +33,146 @@ from app.core.config import settings
 
 router = APIRouter()
 ingestion_service = IngestionService()
+
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    # Render and most reverse proxies buffer responses by default, which defeats streaming
+    # entirely: the client sits silent and then receives the whole answer at once.
+    "X-Accel-Buffering": "no",
+}
+
+
+def _sse(event: str, data: dict) -> str:
+    """Format one server-sent event frame."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+# =============================================================================
+# Streaming Query - Server-Sent Events
+# =============================================================================
+
+@router.post("/query/stream")
+async def query_knowledge_base_stream(request: QueryRequest):
+    """
+    Same retrieval as /query, streamed over SSE.
+
+    Frames:
+      event: sources  -> citations, sent before the first token
+      event: token    -> {"text": "..."} per chunk
+      event: done     -> {"finish_reason": "stop"}
+      event: error    -> {"message": "..."} if generation dies mid-stream
+
+    Stateless: nothing about this request is retained between calls, and no request state is
+    shared across concurrent callers.
+    """
+    def generate():
+        try:
+            sources, tokens = rag_service.query_stream(
+                question=request.question,
+                k=request.k,
+                use_hybrid_search=getattr(request, "use_hybrid_search", True),
+                optimize_query=getattr(request, "optimize_query", False),
+                use_reranking=getattr(request, "use_reranking", False),
+            )
+            yield _sse("sources", {"sources": sources, "num_sources": len(sources)})
+            for chunk in tokens:
+                yield _sse("token", {"text": chunk})
+            yield _sse("done", {"finish_reason": "stop"})
+        except Exception as e:
+            # The stream has already started, so a raised exception would just truncate the
+            # body with no explanation. Send a real error frame instead.
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(generate(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+# =============================================================================
+# OpenAI-Compatible Chat Completions
+# =============================================================================
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    """Subset of OpenAI's chat completions request that this service honours."""
+
+    messages: List[ChatMessage] = Field(..., min_length=1)
+    model: Optional[str] = Field(default="enterprise-rag")
+    stream: bool = Field(default=False)
+    k: Optional[int] = Field(default=3, ge=1, le=10)
+    use_reranking: bool = Field(default=False)
+
+
+def _latest_user_message(messages: List[ChatMessage]) -> str:
+    for message in reversed(messages):
+        if message.role == "user":
+            return message.content
+    raise HTTPException(status_code=400, detail="No user message found in `messages`.")
+
+
+@router.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    """
+    OpenAI-compatible chat completions, backed by the RAG pipeline.
+
+    Works with any OpenAI client by pointing base_url at this service. Set stream=true for
+    incremental `chat.completion.chunk` frames terminated by [DONE], or leave it false for a
+    single `chat.completion` object.
+
+    Only the newest user message is used for retrieval. This endpoint is stateless by design:
+    prior turns are not stored, and the caller owns conversation history. Nothing from the
+    prompt or the response is persisted or logged.
+    """
+    question = _latest_user_message(request.messages)
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    created = int(time.time())
+
+    if not request.stream:
+        result = rag_service.query(
+            question=question,
+            k=request.k,
+            use_reranking=request.use_reranking,
+        )
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": result.model_used,
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": result.answer},
+                "finish_reason": "stop",
+            }],
+        }
+
+    def generate():
+        def frame(delta: dict, finish_reason=None):
+            return "data: " + json.dumps({
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": request.model,
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+            }) + "\n\n"
+
+        try:
+            _sources, tokens = rag_service.query_stream(
+                question=question,
+                k=request.k,
+                use_reranking=request.use_reranking,
+            )
+            yield frame({"role": "assistant"})
+            for chunk in tokens:
+                yield frame({"content": chunk})
+            yield frame({}, finish_reason="stop")
+        except Exception as e:
+            yield frame({"content": f"\n[error] {e}"}, finish_reason="stop")
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 # =============================================================================

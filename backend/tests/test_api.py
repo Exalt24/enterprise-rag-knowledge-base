@@ -88,6 +88,127 @@ def test_query():
     return True
 
 
+def test_query_stream():
+    """Test /query/stream endpoint (server-sent events)"""
+    print("\n" + "=" * 70)
+    print("TEST: Streaming Query (SSE)")
+    print("=" * 70)
+
+    import time
+
+    payload = {"question": "What is RAG?", "k": 3}
+    first_token_at = None
+    started = time.time()
+    events = []
+    answer = ""
+
+    with requests.post(
+        f"{BASE_URL}/api/query/stream", json=payload, stream=True, timeout=120
+    ) as response:
+        print(f"Status Code: {response.status_code}")
+        print(f"Content-Type: {response.headers.get('content-type')}")
+
+        if response.status_code != 200:
+            print(f"[X] Failed: {response.text}")
+            return False
+
+        event_name = None
+        for raw in response.iter_lines(decode_unicode=True):
+            if raw is None or raw == "":
+                continue
+            if raw.startswith("event: "):
+                event_name = raw[7:].strip()
+                events.append(event_name)
+            elif raw.startswith("data: "):
+                data = json.loads(raw[6:])
+                if event_name == "sources":
+                    print(f"Sources received first: {data['num_sources']}")
+                elif event_name == "token":
+                    if first_token_at is None:
+                        first_token_at = time.time() - started
+                    answer += data["text"]
+                elif event_name == "error":
+                    print(f"[X] Stream error: {data['message']}")
+                    return False
+
+    token_count = events.count("token")
+    print(f"Time to first token: {first_token_at:.2f}s" if first_token_at else "No tokens")
+    print(f"Token events: {token_count}")
+    print(f"Answer: {answer[:150]}...")
+
+    # The point of streaming is incremental delivery, so a single fat chunk is a failure
+    # even though the answer text would look correct.
+    checks = (
+        events
+        and events[0] == "sources"
+        and events[-1] == "done"
+        and token_count > 1
+        and answer.strip()
+    )
+
+    if checks:
+        print("[OK] Streaming query passed")
+        return True
+
+    print(f"[X] Unexpected event sequence: {events[:6]}")
+    return False
+
+
+def test_chat_completions():
+    """Test /v1/chat/completions endpoint (OpenAI-compatible, both modes)"""
+    print("\n" + "=" * 70)
+    print("TEST: OpenAI-Compatible Chat Completions")
+    print("=" * 70)
+
+    body = {"messages": [{"role": "user", "content": "What is RAG?"}]}
+
+    # Non-streaming
+    response = requests.post(f"{BASE_URL}/api/v1/chat/completions", json=body, timeout=120)
+    print(f"[non-stream] Status: {response.status_code}")
+    if response.status_code != 200:
+        print(f"[X] Failed: {response.text}")
+        return False
+
+    data = response.json()
+    print(f"[non-stream] object: {data.get('object')}")
+    print(f"[non-stream] model: {data.get('model')}")
+    if data.get("object") != "chat.completion" or not data["choices"][0]["message"]["content"]:
+        print("[X] Response does not match OpenAI chat.completion shape")
+        return False
+
+    # Streaming
+    chunks = 0
+    saw_done = False
+    with requests.post(
+        f"{BASE_URL}/api/v1/chat/completions",
+        json={**body, "stream": True},
+        stream=True,
+        timeout=120,
+    ) as response:
+        print(f"[stream] Status: {response.status_code}")
+        for raw in response.iter_lines(decode_unicode=True):
+            if not raw or not raw.startswith("data: "):
+                continue
+            payload = raw[6:]
+            if payload == "[DONE]":
+                saw_done = True
+                break
+            frame = json.loads(payload)
+            if frame.get("object") != "chat.completion.chunk":
+                print("[X] Bad chunk object type")
+                return False
+            chunks += 1
+
+    print(f"[stream] chunks: {chunks}, terminated with [DONE]: {saw_done}")
+
+    if chunks > 1 and saw_done:
+        print("[OK] Chat completions passed")
+        return True
+
+    print("[X] Streaming chunks or [DONE] terminator missing")
+    return False
+
+
 def test_ingest():
     """Test /ingest endpoint"""
     print("\n" + "=" * 70)
@@ -140,6 +261,8 @@ if __name__ == "__main__":
             "health": test_health(),
             "stats": test_stats(),
             "query": test_query(),
+            "query/stream": test_query_stream(),
+            "v1/chat/completions": test_chat_completions(),
             "ingest": test_ingest(),
         }
 

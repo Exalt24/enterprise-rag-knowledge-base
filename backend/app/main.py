@@ -5,6 +5,8 @@ REST API for the RAG system.
 
 Endpoints:
 - POST /api/query - Ask questions
+- POST /api/query/stream - Ask questions, answer streams over server-sent events
+- POST /api/v1/chat/completions - OpenAI-compatible chat completions (stream or blocking)
 - POST /api/ingest - Upload documents
 - GET /api/stats - Database statistics
 - GET /api/health - Health check
