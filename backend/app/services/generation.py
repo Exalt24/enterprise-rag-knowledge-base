@@ -11,7 +11,7 @@ Benefits:
 - Production pattern: Multi-provider resilience
 """
 
-from typing import Optional
+from typing import Optional, Iterator, Tuple
 from pydantic import BaseModel, Field
 from langchain_ollama import OllamaLLM
 from langchain_groq import ChatGroq
@@ -110,6 +110,60 @@ Answer:""")
         except Exception as e:
             print(f"[!] {llm_name} failed: {e}")
             return None
+
+    def _stream_with_llm(self, llm, llm_name: str, query: str, context: str) -> Iterator[str]:
+        """
+        Stream tokens from a specific LLM.
+
+        Raises on failure so the caller can fall through to the next tier. We deliberately
+        buffer the first chunk before yielding anything: if the provider is going to fail it
+        almost always fails on the opening call, and that lets us fall back cleanly instead
+        of stranding the client mid-answer with half a response already sent.
+        """
+        chain = self.prompt_template | llm | StrOutputParser()
+        stream = chain.stream({"context": context, "question": query})
+
+        first = next(stream)   # may raise, caller handles the fallback
+        yield first
+        for chunk in stream:
+            if chunk:
+                yield chunk
+
+    def generate_stream(self, query: str, context: str) -> Tuple[str, Iterator[str]]:
+        """
+        Stream an answer with the same 2-tier fallback as generate().
+
+        Returns (model_used, token_iterator). The provider is resolved eagerly so the caller
+        knows which model answered before the first token reaches the client, which matters
+        for the OpenAI-compatible payload where `model` sits in the very first SSE frame.
+        """
+        tiers = []
+        if self.ollama:
+            tiers.append((self.ollama, f"ollama/{settings.ollama_model}"))
+        if self.groq:
+            tiers.append((self.groq, "groq/llama-3.3-70b-versatile"))
+
+        for llm, llm_name in tiers:
+            try:
+                stream = self._stream_with_llm(llm, llm_name, query, context)
+                first = next(stream)  # forces the provider call, so failures surface here
+
+                def _iter(first_chunk=first, rest=stream):
+                    yield first_chunk
+                    yield from rest
+
+                return llm_name, _iter()
+            except StopIteration:
+                # Provider returned an empty answer. Treat as success, not a failure.
+                return llm_name, iter(())
+            except Exception as e:
+                print(f"[!] {llm_name} streaming failed: {e}")
+                continue
+
+        def _err():
+            yield "[X] All LLM providers unavailable. Please check your configuration."
+
+        return "none", _err()
 
     def generate(
         self,

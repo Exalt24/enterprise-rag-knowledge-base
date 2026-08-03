@@ -13,7 +13,7 @@ Flow:
 This is what users interact with!
 """
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Iterator, Tuple
 from pydantic import BaseModel, Field
 from langchain_core.documents import Document
 from app.services.retrieval import retrieval_service, RetrievalResult
@@ -201,6 +201,58 @@ class RAGService:
         }, cache_options)
 
         return response
+
+    def query_stream(
+        self,
+        question: str,
+        k: int = None,
+        use_hybrid_search: bool = True,
+        optimize_query: bool = False,
+        use_reranking: bool = False
+    ) -> Tuple[List[Dict], Iterator[str]]:
+        """
+        Same retrieval path as query(), but the answer streams token by token.
+
+        Returns (sources, token_iterator). Sources resolve before the first token so the
+        client can render citations while the answer is still arriving.
+
+        Deliberately NOT cached. The cache stores whole answers, and replaying a cached
+        string as fake tokens would report a model that never ran for this request. A cache
+        hit is better served by the non-streaming endpoint.
+        """
+        print(f"\n[i] Streaming query: '{question}'")
+
+        search_query = self.advanced.optimize_query(question) if optimize_query else question
+
+        if use_hybrid_search:
+            documents, scores = self.advanced.hybrid_search(search_query, k=k, with_scores=True)
+        else:
+            result = self.retrieval.retrieve(search_query, k=k, with_scores=True)
+            documents, scores = result.documents, result.scores
+
+        if not documents:
+            def _empty():
+                yield ("I don't have any relevant information to answer this question. "
+                       "Please add documents to the knowledge base.")
+            return [], _empty()
+
+        if use_reranking:
+            reranked = self.advanced.rerank(search_query, documents, top_k=k)
+            documents = [doc for doc, _ in reranked]
+
+        context = self.retrieval.format_context(documents)
+
+        sources = [
+            {
+                "file_name": doc.metadata.get("file_name", "unknown"),
+                "page": doc.metadata.get("page"),
+                "content_preview": doc.page_content[:100] + "..."
+            }
+            for doc in documents
+        ]
+
+        _model, token_iter = self.generation.generate_stream(question, context)
+        return sources, token_iter
 
 
 # Global instance
