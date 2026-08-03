@@ -146,7 +146,17 @@ class VectorStoreService:
 
         print(f"[i] Adding {len(documents)} documents to Qdrant...")
 
-        ids = self._vectorstore.add_documents(documents)
+        # Upsert in batches rather than one call. Embedding every chunk at once holds all
+        # vectors and their payloads in memory simultaneously, which OOM-killed the 512Mi
+        # production instance on a 32KB markdown file (~70 chunks). Batching bounds peak
+        # memory to roughly one batch regardless of document size, so ingestion scales with
+        # the file instead of falling over at a cliff.
+        ids: List[str] = []
+        total = len(documents)
+        for start in range(0, total, settings.ingest_batch_size):
+            batch = documents[start:start + settings.ingest_batch_size]
+            ids.extend(self._vectorstore.add_documents(batch))
+            print(f"[i]   {min(start + len(batch), total)}/{total} chunks stored")
 
         print(f"[OK] Added {len(ids)} documents!")
 
