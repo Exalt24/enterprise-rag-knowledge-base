@@ -69,13 +69,46 @@ def load_corpus(base_url):
     anchor against that preview would measure "does the phrase fall in the first 100
     characters", not "was the correct chunk retrieved", and would badly understate accuracy.
     """
-    docs = json.loads(urllib.request.urlopen(f"{base_url}/documents", timeout=180).read())
-    chunks = []
-    for d in docs.get("documents", docs if isinstance(docs, list) else []):
-        text = d.get("page_content") or d.get("content") or ""
-        if text:
-            chunks.append(text)
-    return chunks
+    try:
+        docs = json.loads(
+            urllib.request.urlopen(f"{base_url}/documents", timeout=180).read()
+        )
+        chunks = [
+            d.get("page_content") or d.get("content") or ""
+            for d in docs.get("documents", [])
+        ]
+        chunks = [c for c in chunks if c]
+        if chunks:
+            return chunks
+    except Exception as e:
+        print(f"  [i] /documents unavailable ({e}), falling back to the vector store")
+
+    # Fall back to reading the store directly. Needed because /documents groups by file
+    # metadata and can come back empty even when the collection holds points, which would
+    # silently leave every anchor unresolvable and report a fake 0%.
+    import os
+
+    url = os.environ.get("QDRANT_URL")
+    key = os.environ.get("QDRANT_API_KEY")
+    collection = os.environ.get("QDRANT_COLLECTION", "enterprise_rag")
+    if not (url and key):
+        raise SystemExit(
+            "Cannot load corpus: /documents was empty and QDRANT_URL / QDRANT_API_KEY "
+            "are not set. Refusing to score against an empty corpus."
+        )
+
+    req = urllib.request.Request(
+        f"{url.rstrip('/')}/collections/{collection}/points/scroll",
+        data=json.dumps({"limit": 500, "with_payload": True, "with_vector": False}).encode(),
+        headers={"Content-Type": "application/json", "api-key": key},
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        points = json.loads(r.read())["result"]["points"]
+    return [
+        p["payload"].get("page_content", "")
+        for p in points
+        if p.get("payload", {}).get("page_content")
+    ]
 
 
 def resolve(preview, chunks):
@@ -129,7 +162,7 @@ def main():
         for question, anchor in EVAL_SET:
             try:
                 found = anchor.lower() in retrieved_text(
-                    args.base_url, question, args.k, opts
+                    args.base_url, question, args.k, opts, chunks
                 ).lower()
             except Exception as e:
                 print(f"  [!] {question[:40]}... errored: {e}")
