@@ -148,10 +148,15 @@ class AdvancedRetrieval:
             # Combine results with weighted scoring
             combined_scores = {}
 
-            # Add vector results (convert L2 distance to similarity: 1/(1+distance))
+            # The collection is created with Distance.COSINE, so Qdrant already returns a
+            # SIMILARITY here (higher is better), not an L2 distance. The previous code ran
+            # 1/(1+score) over it to "convert distance to similarity", which inverted the
+            # ranking: a 0.8 match became 0.556 while a 0.2 match became 0.833. Hybrid search
+            # therefore ranked the worst chunks first and scored below plain vector search,
+            # which is the opposite of what hybrid is for.
             for doc in vector_docs:
-                vector_dist = vector_scores_dict.get(doc.page_content, 0)
-                vector_sim = 1 / (1 + vector_dist)  # Convert distance to similarity
+                vector_sim = vector_scores_dict.get(doc.page_content, 0.0)
+                vector_sim = max(0.0, min(1.0, vector_sim))  # cosine can go negative
                 combined_scores[doc.page_content] = {
                     "doc": doc,
                     "score": vector_sim * vector_weight,  # Apply weight
