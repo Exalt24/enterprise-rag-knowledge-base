@@ -28,6 +28,10 @@ from app.core.config import settings
 from app.services.embeddings import embedding_service
 
 
+class VectorStoreUnavailable(RuntimeError):
+    """Raised when an operation needs the vector store but it could not be reached."""
+
+
 class VectorStoreService:
     """
     Manages Qdrant Cloud vector database.
@@ -44,27 +48,45 @@ class VectorStoreService:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
-        """Initialize Qdrant Cloud connection"""
-        if self._vectorstore is None:
-            print(f"[i] Connecting to Qdrant Cloud: {settings.qdrant_url[:50]}...")
+    _init_error = None
 
-            # Create Qdrant client
+    def __init__(self):
+        """
+        Initialize the Qdrant connection.
+
+        This MUST NOT raise. The module-level singleton below runs at import time, so an
+        exception here takes down the entire API rather than one feature. That is exactly
+        what happened between 2026-07-10 and 2026-08-03: the managed Qdrant cluster was
+        removed, create_collection raised 404, and the whole service crash-looped on boot
+        while every other endpoint would have been perfectly serveable.
+
+        On failure we record the reason and come up degraded. /health reports it, retrieval
+        endpoints return a clean 503, and connect() can recover later without a redeploy.
+        """
+        if self._vectorstore is None and self._init_error is None:
+            self.connect()
+
+    def connect(self) -> bool:
+        """(Re)establish the Qdrant connection. Returns True when the store is usable."""
+        try:
+            print(f"[i] Connecting to Qdrant: {settings.qdrant_url[:50]}...")
+
             self._client = QdrantClient(
                 url=settings.qdrant_url,
                 api_key=settings.qdrant_api_key,
                 timeout=30.0
             )
 
-            # Get embeddings
             embeddings = embedding_service.get_embeddings()
 
-            # Create collection if it doesn't exist
+            # Ensure the collection exists. Note the narrow except: a missing collection is
+            # recoverable, but an unreachable host is not, and lumping them together is what
+            # hid this failure before.
             try:
                 self._client.get_collection(settings.qdrant_collection)
                 print(f"[OK] Connected to existing collection: {settings.qdrant_collection}")
-            except:
-                print(f"[i] Creating new collection: {settings.qdrant_collection}")
+            except Exception as lookup_error:
+                print(f"[i] Collection lookup failed ({lookup_error}); attempting to create it")
                 self._client.create_collection(
                     collection_name=settings.qdrant_collection,
                     vectors_config=VectorParams(
@@ -74,14 +96,37 @@ class VectorStoreService:
                 )
                 print(f"[OK] Collection created!")
 
-            # Initialize LangChain QdrantVectorStore
             self._vectorstore = QdrantVectorStore(
                 client=self._client,
                 collection_name=settings.qdrant_collection,
                 embedding=embeddings
             )
 
+            type(self)._init_error = None
             print(f"[OK] Qdrant vector store ready!")
+            return True
+
+        except Exception as e:
+            type(self)._init_error = f"{type(e).__name__}: {e}"
+            self._vectorstore = None
+            print(f"[!] Qdrant unavailable, starting in DEGRADED mode: {self._init_error}")
+            print("[!] Retrieval endpoints will return 503 until the vector store is reachable.")
+            return False
+
+    @property
+    def is_available(self) -> bool:
+        return self._vectorstore is not None
+
+    @property
+    def unavailable_reason(self):
+        return self._init_error
+
+    def require(self):
+        """Raise a clear, catchable error when callers need a working store."""
+        if not self.is_available:
+            raise VectorStoreUnavailable(
+                f"Vector store unavailable: {self._init_error}"
+            )
 
     def add_documents(self, documents: List[Document]) -> List[str]:
         """
@@ -95,6 +140,7 @@ class VectorStoreService:
 
         Note: Embeddings are generated automatically!
         """
+        self.require()
         if not documents:
             return []
 
@@ -123,6 +169,7 @@ class VectorStoreService:
         Returns:
             List of most similar Documents with metadata
         """
+        self.require()
         k = k or settings.retrieval_top_k
 
         if filter:
@@ -152,6 +199,7 @@ class VectorStoreService:
             List of (Document, score) tuples
             Score: Higher is more similar (cosine similarity)
         """
+        self.require()
         k = k or settings.retrieval_top_k
 
         results = self._vectorstore.similarity_search_with_score(query, k=k)
@@ -160,6 +208,7 @@ class VectorStoreService:
 
     def delete_documents(self, ids: List[str]) -> None:
         """Delete documents by IDs"""
+        self.require()
         self._client.delete(
             collection_name=settings.qdrant_collection,
             points_selector=ids
@@ -172,6 +221,7 @@ class VectorStoreService:
         Returns:
             List of all Document objects with page_content and metadata
         """
+        self.require()
         from qdrant_client.models import ScrollRequest
 
         all_docs = []
@@ -194,6 +244,7 @@ class VectorStoreService:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics"""
+        self.require()
         collection_info = self._client.get_collection(settings.qdrant_collection)
 
         return {
@@ -208,6 +259,7 @@ class VectorStoreService:
 
     def clear_database(self) -> None:
         """Delete ALL documents (use carefully!)"""
+        self.require()
         self._client.delete_collection(settings.qdrant_collection)
         # Recreate empty collection
         self._client.create_collection(
