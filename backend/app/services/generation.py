@@ -69,6 +69,23 @@ class GenerationService:
         if self.groq and self.ollama:
             print(f"  - Groq: Configured (fallback)")
 
+        # Define RAG prompt template
+        self.prompt_template = ChatPromptTemplate.from_template("""
+You are a helpful AI assistant answering questions based on provided context.
+
+IMPORTANT RULES:
+1. Answer ONLY using information from the context below
+2. If the answer is not in the context, say "I don't have that information in the provided documents."
+3. Be concise and accurate
+4. Cite sources when possible (e.g., "According to the document...")
+
+Context:
+{context}
+
+Question: {question}
+
+Answer:""")
+
     @property
     def primary_llm(self):
         """
@@ -88,23 +105,6 @@ class GenerationService:
         if self.groq:
             return "groq/llama-3.3-70b-versatile"
         return "none"
-
-        # Define RAG prompt template
-        self.prompt_template = ChatPromptTemplate.from_template("""
-You are a helpful AI assistant answering questions based on provided context.
-
-IMPORTANT RULES:
-1. Answer ONLY using information from the context below
-2. If the answer is not in the context, say "I don't have that information in the provided documents."
-3. Be concise and accurate
-4. Cite sources when possible (e.g., "According to the document...")
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:""")
 
     def _generate_with_llm(self, llm, llm_name: str, query: str, context: str) -> Optional[GenerationResponse]:
         """
