@@ -10,13 +10,15 @@ Implements:
 This is where LangGraph shines - stateful workflows!
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Annotated
+from typing_extensions import TypedDict
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from app.services.retrieval import retrieval_service
 from app.services.generation import generation_service
@@ -44,6 +46,30 @@ class ConversationState(BaseModel):
     sources: List[Dict] = Field(default=[], description="Source documents")
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+class GraphState(TypedDict, total=False):
+    """
+    The actual LangGraph state schema.
+
+    The graph used to be built as StateGraph(dict), which has no schema and therefore no
+    reducers, so every node's returned value REPLACED each channel. Combined with seeding
+    "messages": [] on every invoke, that wiped the checkpointer's history on each request:
+    the turn was saved, then immediately overwritten, so reformulation always saw an empty
+    history and every follow-up was silently treated as a standalone question.
+
+    `messages` now carries the add_messages reducer, so returning a list APPENDS to the
+    accumulated history instead of replacing it. Every node below returns only the keys it
+    actually changed, which matters: returning the whole state would re-append the history
+    it just read and duplicate every turn.
+    """
+    question: str
+    standalone_question: str
+    messages: Annotated[list, add_messages]
+    context: str
+    answer: str
+    model_used: str
+    sources: List[Dict]
 
 
 class ConversationService:
@@ -76,7 +102,7 @@ class ConversationService:
         4. Save to memory
         """
 
-        workflow = StateGraph(dict)  # Use dict for state (Pydantic models have issues)
+        workflow = StateGraph(GraphState)
 
         # Define nodes (steps in the workflow)
         workflow.add_node("reformulate", self._reformulate_question)
@@ -109,8 +135,7 @@ class ConversationService:
 
         # If no history, question is already standalone
         if len(messages) == 0:
-            state["standalone_question"] = question
-            return state
+            return {"standalone_question": question}
 
         # Use LLM to reformulate based on history
         reformulate_prompt = ChatPromptTemplate.from_messages([
@@ -140,14 +165,12 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
                 "question": question
             })
 
-            state["standalone_question"] = standalone.strip()
             print(f"[i] Reformulated: '{question}' → '{standalone.strip()}'")
+            return {"standalone_question": standalone.strip()}
 
         except Exception as e:
             print(f"[!] Reformulation failed, using original: {e}")
-            state["standalone_question"] = question
-
-        return state
+            return {"standalone_question": question}
 
     def _retrieve_context(self, state: Dict) -> Dict:
         """Retrieve relevant documents for standalone question"""
@@ -162,17 +185,17 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         # Format context
         context = self.retrieval.format_context(results.documents)
 
-        state["context"] = context
-        state["sources"] = [
-            {
-                "file_name": doc.metadata.get("file_name", "unknown"),
-                "page": doc.metadata.get("page"),
-                "content_preview": doc.page_content[:100] + "..."
-            }
-            for doc in results.documents
-        ]
-
-        return state
+        return {
+            "context": context,
+            "sources": [
+                {
+                    "file_name": doc.metadata.get("file_name", "unknown"),
+                    "page": doc.metadata.get("page"),
+                    "content_preview": doc.page_content[:100] + "..."
+                }
+                for doc in results.documents
+            ],
+        }
 
     def _generate_answer(self, state: Dict) -> Dict:
         """Generate answer using context and chat history"""
@@ -184,16 +207,16 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         # Generate answer with full chat history for context
         gen_response = self.generation.generate(question, context)
 
-        state["answer"] = gen_response.answer
-        state["model_used"] = gen_response.model_used
-
-        # Add messages to history
-        state["messages"] = messages + [
-            HumanMessage(content=question),
-            AIMessage(content=gen_response.answer)
-        ]
-
-        return state
+        # Return ONLY the new turn. The add_messages reducer appends it to the accumulated
+        # history, so handing back `messages + [...]` here would duplicate every prior turn.
+        return {
+            "answer": gen_response.answer,
+            "model_used": gen_response.model_used,
+            "messages": [
+                HumanMessage(content=question),
+                AIMessage(content=gen_response.answer),
+            ],
+        }
 
     def query_with_memory(
         self,
@@ -215,14 +238,9 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         print("-" * 70)
 
         # Prepare initial state
-        initial_state = {
-            "question": question,
-            "messages": [],
-            "context": "",
-            "answer": "",
-            "sources": [],
-            "model_used": ""
-        }
+        # Deliberately does NOT seed "messages". The checkpointer supplies the accumulated
+        # history for this thread_id, and passing an empty list here is what used to wipe it.
+        initial_state = {"question": question}
 
         # Run graph with checkpointing (memory!)
         config = {"configurable": {"thread_id": conversation_id}}
