@@ -69,6 +69,26 @@ class GenerationService:
         if self.groq and self.ollama:
             print(f"  - Groq: Configured (fallback)")
 
+    @property
+    def primary_llm(self):
+        """
+        The first provider that will actually be tried, or None if nothing is configured.
+
+        Callers that need "an LLM" must go through this rather than reaching for
+        .ollama directly. On Render .ollama is None, so a hardcoded .ollama reference
+        builds a broken chain and fails at invoke time.
+        """
+        return self.ollama or self.groq
+
+    @property
+    def primary_model_name(self) -> str:
+        """Label of the provider that answers first, so reporting matches reality."""
+        if self.ollama:
+            return f"ollama/{settings.ollama_model}"
+        if self.groq:
+            return "groq/llama-3.3-70b-versatile"
+        return "none"
+
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
 You are a helpful AI assistant answering questions based on provided context.

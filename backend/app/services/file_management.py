@@ -51,45 +51,63 @@ class FileManagementService:
         Returns:
             List of DocumentInfo objects
         """
-        if not self.documents_dir.exists():
-            return []
-
-        documents = []
-
-        # Get all supported files
-        supported_extensions = {'.pdf', '.docx', '.txt', '.md'}
-        files = []
-
-        for ext in supported_extensions:
-            files.extend(self.documents_dir.glob(f"*{ext}"))
-
-        # Get all documents from vector DB
+        # The VECTOR STORE is the source of truth here, not the local filesystem.
+        # This used to glob ./data/documents and count chunks per file found on disk,
+        # which returns nothing on an ephemeral filesystem: the host wipes the directory
+        # on every deploy while the embeddings persist in Qdrant. The result was a UI
+        # reporting "Documents (0)" directly beneath a stats bar reporting 26 documents.
+        # Grouping the vector-store payloads by file_name reflects what is actually
+        # retrievable, which is the thing a user cares about.
         all_docs = self.vector_store.get_all_documents()
         total_chunks = len(all_docs)
+        if total_chunks == 0:
+            return []
 
-        # Build document info
-        for file_path in files:
-            # Count chunks for this file
-            chunk_count = sum(
-                1 for doc in all_docs
-                if doc.metadata.get('file_name') == file_path.name
-            )
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for doc in all_docs:
+            meta = doc.metadata or {}
+            name = meta.get('file_name') or 'unknown'
+            entry = grouped.setdefault(name, {
+                'chunk_count': 0,
+                'file_type': (meta.get('file_type') or Path(name).suffix[1:] or 'unknown'),
+                'file_size_kb': meta.get('file_size_kb'),
+                'upload_date': meta.get('upload_date'),
+            })
+            entry['chunk_count'] += 1
+            # Keep the first non-empty value we see for the descriptive fields.
+            if entry['file_size_kb'] in (None, '') and meta.get('file_size_kb') not in (None, ''):
+                entry['file_size_kb'] = meta.get('file_size_kb')
+            if not entry['upload_date'] and meta.get('upload_date'):
+                entry['upload_date'] = meta.get('upload_date')
 
-            # Get file stats
-            stat = file_path.stat()
+        documents = []
+        for name, info in grouped.items():
+            # Prefer real stats when the file still happens to be on disk, otherwise
+            # fall back to what ingestion recorded in the payload.
+            local = self.documents_dir / name
+            size_kb = info['file_size_kb']
+            upload_date = info['upload_date']
+            file_path = str(local)
+            if local.exists():
+                stat = local.stat()
+                size_kb = round(stat.st_size / 1024, 2)
+                upload_date = upload_date or datetime.fromtimestamp(stat.st_mtime).isoformat()
+            else:
+                file_path = f"qdrant://{name}"
 
             documents.append(DocumentInfo(
-                file_name=file_path.name,
-                file_path=str(file_path),
-                file_type=file_path.suffix[1:],  # Remove dot
-                file_size_kb=round(stat.st_size / 1024, 2),
-                upload_date=datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                chunk_count=chunk_count,
+                file_name=name,
+                file_path=file_path,
+                file_type=info['file_type'],
+                file_size_kb=float(size_kb) if size_kb not in (None, '') else 0.0,
+                upload_date=upload_date or '',
+                chunk_count=info['chunk_count'],
                 total_chunks=total_chunks
             ))
 
-        # Sort by upload date (newest first)
-        documents.sort(key=lambda x: x.upload_date, reverse=True)
+        # Sort by upload date (newest first), blanks last so they don't jump the list.
+        documents.sort(key=lambda x: (x.upload_date == '', x.upload_date), reverse=False)
+        documents.reverse()
 
         return documents
 
