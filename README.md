@@ -14,7 +14,7 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 - **API:** https://enterprise-rag-api.onrender.com
 - **API Docs:** https://enterprise-rag-api.onrender.com/docs
 
-**Note:** Render free tier may sleep after 15min inactivity (first request takes ~30s to wake up)
+**Note on the free tier:** the backend sleeps after ~15 minutes idle, and **a cold start takes roughly 8-9 minutes**, not seconds, because the container re-downloads the embedding model from the HuggingFace Hub on every wake. If the demo looks dead, it is almost certainly waking up. Hit [`/api/health`](https://enterprise-rag-api.onrender.com/api/health) and wait for `{"status":"healthy"}` before judging it.
 
 ---
 
@@ -22,12 +22,18 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 
 ### Advanced RAG Pipeline
 
-**5 Retrieval Strategies:**
-- **Basic Vector Search:** Semantic similarity (40% accuracy)
-- **Hybrid Search:** Vector (70%) + BM25 keyword (30%) = 60% accuracy
-- **HyDE:** Hypothetical Document Embeddings (75-80% accuracy)
-- **Multi-Query:** LLM-generated query variations (75-80% accuracy)
-- **Cross-Encoder Reranking:** Neural reranking for 85%+ accuracy
+**3 retrieval strategies exposed through the API:**
+- **Basic Vector Search:** cosine similarity over 384-dim embeddings
+- **Hybrid Search:** vector (70%) + BM25 keyword (30%), the default
+- **Cross-Encoder Reranking:** neural rescoring pass, **disabled on the free tier** (512MB RAM)
+
+**2 more implemented but NOT wired to the API** (callable as library functions only, see Advanced Usage):
+- **HyDE:** Hypothetical Document Embeddings
+- **Multi-Query:** LLM-generated query variations
+
+See [Retrieval Accuracy](#retrieval-accuracy) for measured numbers. Earlier revisions of this README
+attached a percentage to each strategy; those were pre-bugfix figures on a different corpus and have
+been removed rather than restated.
 
 **Document Processing:**
 - Multi-format support: PDF, DOCX, TXT, Markdown
@@ -38,7 +44,9 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 
 **Production Features:**
 - 2-tier LLM fallback (Ollama local → Groq cloud)
-- Redis caching (100x speedup on repeated queries)
+- **Token-by-token streaming over server-sent events** (`POST /api/query/stream`), citations emitted before the first token
+- **OpenAI-compatible chat completions** (`POST /api/v1/chat/completions`), streaming and blocking, so any OpenAI client can just repoint `base_url`
+- Redis caching (measured 4.9s cold vs 0.16s on a cache hit)
 - Rate limiting (sliding window, per-IP, per-endpoint)
 - BM25 index caching (250x speedup)
 - Redis connection pooling (30% faster)
@@ -94,12 +102,33 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 
 ## Performance Metrics
 
-**Retrieval Accuracy (Tested):**
-- Basic vector: ~40%
-- Hybrid search: ~60%
-- Hybrid + reranking: 67.7% (tested with evaluation)
-- HyDE / Multi-Query: ~75-80% (estimated)
-- Combined (Multi-Query + Hybrid + Rerank): ~85%+
+<a id="retrieval-accuracy"></a>
+**Retrieval Accuracy (re-measured 2026-08-03 against the live deployment)**
+
+Harness: `backend/tests/eval_retrieval.py`. Corpus 26 chunks, 20 questions, scored hit@k on whether the
+chunk containing the answer was retrieved at all.
+
+| hit@k | vector only | hybrid | hybrid + rerank |
+|---|---|---|---|
+| k=1 | 85.0% | **90.0%** | 90.0% |
+| k=3 | 100% | 100% | 100% |
+
+Read those honestly:
+- **k=3 is saturated.** That means the benchmark is too easy to separate the strategies, not that
+  retrieval is solved. k=1 is the discriminating number.
+- **Hybrid beats plain vector by 5 points**, which is the claim this supports.
+- **The reranker adds nothing at this corpus size**, which is what you would expect when there is
+  barely anything to reorder. It is not evidence the reranker is useless in general.
+- The corpus is 26 chunks. This is a portfolio deployment, not production traffic.
+
+**Why the old numbers are gone.** An earlier revision advertised ~40% vector / ~60% hybrid / 67.7%
+reranked. Those predate a scoring bug found on 2026-08-03: `hybrid_search` applied `1 / (1 + score)`
+to "convert distance to similarity", but the collection uses cosine, where Qdrant already returns a
+similarity and higher is better. That inverted the ranking, so a 0.82 match scored 0.549 while a 0.12
+match scored 0.893, and the **default** retrieval path was promoting the least relevant chunks. It
+surfaced as "I don't have that information" on questions plain vector search answered correctly.
+Fixed by using the cosine score directly, clamped to [0,1]. The old figures were never re-validated
+through the corrected code, so they are treated as historical rather than restated here.
 
 **Search Speed:**
 - Vector search: 7-34ms
@@ -108,18 +137,18 @@ Production-ready Retrieval-Augmented Generation system with advanced retrieval t
 - With Redis cache hit: 40ms
 
 **System Reliability:**
-- 100% success rate (19 test queries, zero failures)
+- 20-question retrieval eval, zero request failures
 - 2-tier LLM fallback (if Ollama down → Groq)
 
 **Performance Optimizations:**
 - BM25 caching: 9.2x speedup on repeated queries
 - Batch embeddings: 11.2x faster than sequential
-- Redis caching: 100x speedup on repeated questions
+- Redis caching: measured 4.9s cold vs 0.16s on a cache hit (~30x) on the live deployment
 - Connection pooling: 20-30% faster Redis operations
 
 **Deployment Optimized for Free Tier:**
 - Render backend: 512MB RAM (Groq for LLM, local embeddings)
-- Redis Cloud: Persistent cache
+- Managed Redis for the cache and the rate limiter (Render Key Value, over the private network)
 - Local embeddings + Qdrant Cloud: ~350MB total (fits under 512MB)
 
 ---
@@ -189,14 +218,18 @@ npm run dev
 3. Ask questions in chat
 4. Toggle advanced options:
    - Hybrid Search (vector + keyword)
-   - Cross-Encoder Reranking (most accurate)
+   - Cross-Encoder Reranking (disabled on the free tier, and it adds nothing at this corpus size)
 
 **API (Interactive Docs):**
 - Visit http://localhost:8001/docs
 - Try endpoints interactively
-- Query: `POST /api/query`
+- Query: `POST /api/query` (add a `conversation_id` for multi-turn memory)
+- Query, streamed: `POST /api/query/stream` (SSE, stateless)
+- OpenAI-compatible: `POST /api/v1/chat/completions` (streaming and blocking)
 - Ingest: `POST /api/ingest`
 - Stats: `GET /api/stats`
+- Documents: `GET /api/documents`, `DELETE /api/documents/{name}`
+- Health: `GET /api/health`
 
 ---
 
@@ -204,7 +237,7 @@ npm run dev
 
 ### Retrieval Strategies
 
-**1. Basic Vector Search (Fast, ~40% accuracy):**
+**1. Basic Vector Search** (API-exposed)
 ```python
 from app.services.rag import rag_service
 
@@ -215,7 +248,7 @@ response = rag_service.query(
 )
 ```
 
-**2. Hybrid Search (Balanced, ~60% accuracy):**
+**2. Hybrid Search** (API-exposed, the default)
 ```python
 response = rag_service.query(
     question="What are the key features?",
@@ -224,7 +257,7 @@ response = rag_service.query(
 )
 ```
 
-**3. With Reranking (Most Accurate, ~75% accuracy):**
+**3. With Reranking** (API-exposed, but skipped automatically on the 512MB free tier)
 ```python
 response = rag_service.query(
     question="What are the key features?",
@@ -234,7 +267,7 @@ response = rag_service.query(
 )
 ```
 
-**4. HyDE Search (~75-80% accuracy):**
+**4. HyDE Search**, implemented but **NOT exposed through the API**. Library call only:
 ```python
 from app.services.advanced_retrieval import advanced_retrieval
 
@@ -245,7 +278,7 @@ docs, scores = advanced_retrieval.hyde_search(
 )
 ```
 
-**5. Multi-Query (~75-80% accuracy, best coverage):**
+**5. Multi-Query**, implemented but **NOT exposed through the API**. Library call only:
 ```python
 docs, scores = advanced_retrieval.multi_query_search(
     query="What are the key features?",
@@ -253,6 +286,69 @@ docs, scores = advanced_retrieval.multi_query_search(
     with_scores=True
 )
 ```
+
+### Streaming and the OpenAI-compatible endpoint
+
+**Server-sent events.** `POST /api/query/stream` emits a `sources` frame *before* the first token, so
+citations render while the answer is still arriving, then `token` frames, then `done`. It is the
+**stateless** route: only the newest question drives retrieval, nothing is retained between calls, and
+it deliberately bypasses the response cache (replaying a cached string as synthetic tokens would report
+a model that never actually ran for that request).
+
+```bash
+curl -N -X POST https://enterprise-rag-api.onrender.com/api/query/stream \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How does hybrid search work?","k":3,"use_hybrid":true}'
+```
+
+```
+event: sources
+data: {"sources": [...], "num_sources": 3}
+
+event: token
+data: {"text": "According"}
+...
+event: done
+data: {"finish_reason": "stop"}
+```
+
+**OpenAI-compatible.** `POST /api/v1/chat/completions` speaks the OpenAI shape in both streaming
+(`chat.completion.chunk` frames terminated by `data: [DONE]`) and blocking (`chat.completion`) form, so
+an existing OpenAI client only needs its `base_url` repointed:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="https://enterprise-rag-api.onrender.com/api/v1", api_key="not-used")
+stream = client.chat.completions.create(
+    model="enterprise-rag",
+    messages=[{"role": "user", "content": "How does hybrid search work?"}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="")
+```
+
+Two implementation notes worth knowing if you read the code:
+- The **first chunk is buffered** before anything is emitted. Providers almost always fail on the
+  opening call, and buffering lets the fallback tier take over instead of stranding the client
+  mid-answer.
+- **`X-Accel-Buffering: no` is mandatory** on Render. Without it the platform proxy buffers the whole
+  response body and streaming has zero observable effect, which looks perfect on localhost and does
+  nothing in production.
+
+### Conversation memory
+
+`POST /api/query` with a `conversation_id` uses the LangGraph path, which reformulates a follow-up into
+a standalone question from the chat history before retrieval runs (you cannot vector-match a pronoun):
+
+```
+"What is hybrid search?"        -> answers with the 70/30 weighting
+"What weighting does it use?"   -> reformulated to "What weighting does hybrid search use?"
+```
+
+Honest limitations: the checkpointer is `MemorySaver`, so history is in-process and does **not** survive
+a restart; swap it for a Redis or Postgres-backed checkpointer for anything real. Memory is also off on
+the streaming route by design, since that route is the stateless one.
 
 ### OCR for Scanned PDFs (Local Only)
 
@@ -455,7 +551,7 @@ python tests/test_rag_evaluation.py
 ✅ CORS configuration
 
 ### Performance
-✅ Redis caching (100x speedup on cache hits)
+✅ Redis caching (measured 4.9s cold vs 0.16s on a cache hit)
 ✅ BM25 index caching (9.2x speedup, scales to 250x)
 ✅ Batch processing (11x faster embeddings)
 ✅ Connection pooling (30% faster Redis ops)
@@ -571,7 +667,7 @@ REDIS_URL=redis://your_redis_url
 
 **Optional (Enhances Features):**
 ```bash
-REDIS_URL=redis://localhost:6379  # Local caching (100x speedup)
+REDIS_URL=redis://localhost:6379  # Local caching (optional)
 GROQ_API_KEY=gsk_...               # Cloud LLM fallback
 CACHE_TTL=3600                     # Cache time (default: 1 hour)
 MAX_FILE_SIZE_MB=10                # Upload limit (default: 10MB)
@@ -619,7 +715,7 @@ npm run dev
 **Not just a demo:**
 - ✅ Comprehensive testing (unit + integration + evaluation)
 - ✅ Live deployment (Render + Vercel)
-- ✅ Advanced techniques (5 retrieval strategies)
+- ✅ Advanced techniques (3 retrieval strategies exposed, 2 more implemented)
 - ✅ Performance optimization (6 major speedups)
 - ✅ Security hardened (rate limiting, input validation)
 - ✅ Error handling (fallbacks, graceful degradation)
@@ -675,4 +771,4 @@ Built with 100% free and open-source technologies, demonstrating cost-effective 
 
 ---
 
-**Production-ready RAG system with 85%+ retrieval accuracy, sub-50ms search, and 100% free tier deployment.**
+**RAG system with hybrid retrieval at 90% hit@1 on a 26-chunk eval set, SSE streaming, an OpenAI-compatible endpoint, and a 100% free-tier deployment.**
