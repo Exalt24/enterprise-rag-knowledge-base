@@ -27,6 +27,7 @@ from app.api.schemas import (
 )
 from app.services.rag import rag_service
 from app.services.conversation import conversation_service
+from app.services.generation import generation_service
 from app.services.ingestion import IngestionService
 from app.services.vector_store import vector_store
 from app.core.config import settings
@@ -218,7 +219,7 @@ async def query_knowledge_base(request: QueryRequest):
                 query=request.question,
                 sources=sources,
                 num_sources=len(sources),
-                model_used="ollama/llama3"
+                model_used=conv_result.get("model_used") or generation_service.primary_model_name
             )
         
         # Standard query (no memory)
@@ -365,7 +366,7 @@ async def get_stats():
             collection_name=stats["collection_name"],
             embedding_model=stats["embedding_model"],
             embedding_dimension=stats["embedding_dimension"],
-            llm_model=settings.ollama_model,
+            llm_model=generation_service.primary_model_name,
             cache_stats=cache_stats
         )
 
