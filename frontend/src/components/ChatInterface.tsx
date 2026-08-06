@@ -8,6 +8,7 @@ interface Message {
   content: string;
   sources?: Source[];
   model?: string;
+  streaming?: boolean;
 }
 
 export function ChatInterface() {
@@ -16,6 +17,7 @@ export function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [useHybrid, setUseHybrid] = useState(true);
   const [useReranking, setUseReranking] = useState(false);
+  const [useStream, setUseStream] = useState(true);
   const [conversationId] = useState(() => `conv_${Date.now()}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -42,25 +44,62 @@ export function ChatInterface() {
     setLoading(true);
 
     try {
-      const response = await api.query({
-        question: userMessage,
-        k: 3,
-        include_sources: true,
-        use_hybrid_search: useHybrid,
-        optimize_query: false,
-        use_reranking: useReranking,
-        conversation_id: conversationId,
-      });
+      if (useStream) {
+        // Streaming path. Push an empty assistant message first, then mutate the LAST
+        // message as frames arrive so the answer visibly builds token by token.
+        // This route is stateless by design, so it does not send conversation_id.
+        setMessages((prev) => [...prev, { type: "assistant", content: "", streaming: true }]);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "assistant",
-          content: response.answer,
-          sources: response.sources,
-          model: response.model_used,
-        },
-      ]);
+        const patchLast = (patch: Partial<Message>) =>
+          setMessages((prev) => {
+            const next = [...prev];
+            const i = next.length - 1;
+            if (i >= 0 && next[i].type === "assistant") next[i] = { ...next[i], ...patch };
+            return next;
+          });
+
+        let answer = "";
+        await api.queryStream(
+          {
+            question: userMessage,
+            k: 3,
+            include_sources: true,
+            use_hybrid_search: useHybrid,
+            optimize_query: false,
+            use_reranking: useReranking,
+          },
+          {
+            onSources: (sources) => patchLast({ sources }),
+            onToken: (text) => {
+              answer += text;
+              patchLast({ content: answer });
+            },
+            onDone: () => patchLast({ streaming: false }),
+          }
+        );
+
+        patchLast({ streaming: false });
+      } else {
+        const response = await api.query({
+          question: userMessage,
+          k: 3,
+          include_sources: true,
+          use_hybrid_search: useHybrid,
+          optimize_query: false,
+          use_reranking: useReranking,
+          conversation_id: conversationId,
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "assistant",
+            content: response.answer,
+            sources: response.sources,
+            model: response.model_used,
+          },
+        ]);
+      }
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -145,9 +184,24 @@ export function ChatInterface() {
             </span>
           </label>
 
+          <label
+            className="flex items-center gap-2 cursor-pointer"
+            title="Stream the answer token by token over server-sent events. This route is stateless, so conversation memory is off while it is on."
+          >
+            <input
+              type="checkbox"
+              checked={useStream}
+              onChange={(e) => setUseStream(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-slate-300">Streaming</span>
+          </label>
+
           <span className="text-slate-500 text-xs ml-auto flex items-center gap-1">
-            <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-            Memory: ON
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${useStream ? "bg-slate-500" : "bg-green-500"}`}
+            ></span>
+            Memory: {useStream ? "OFF (stateless stream)" : "ON"}
           </span>
         </div>
       </div>
@@ -175,6 +229,9 @@ export function ChatInterface() {
               <div className="space-y-2">
                 <div className="bg-slate-700/50 text-slate-100 rounded-lg px-4 py-3 max-w-[90%] relative group">
                   {message.content}
+                  {message.streaming && (
+                    <span className="inline-block w-2 h-4 ml-0.5 align-middle bg-slate-300 animate-pulse" />
+                  )}
                   <button
                     onClick={() => handleCopy(message.content)}
                     className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-white p-1 rounded hover:bg-slate-600"
@@ -220,7 +277,7 @@ export function ChatInterface() {
           </div>
         ))}
 
-        {loading && (
+        {loading && !messages.some((m) => m.streaming) && (
           <div className="flex items-center gap-2 text-slate-400">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-400"></div>
             <span className="text-sm">Thinking...</span>
@@ -249,7 +306,9 @@ export function ChatInterface() {
           </button>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Conversation memory enabled - ask follow-up questions!
+          {useStream
+            ? "Streaming over SSE - stateless, nothing retained between requests."
+            : "Conversation memory enabled - ask follow-up questions!"}
         </p>
       </form>
     </div>

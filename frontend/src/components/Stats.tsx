@@ -45,7 +45,7 @@ export function Stats() {
         <StatItem label="LLM" value={stats.llm_model} />
         <StatItem label="Embeddings" value={stats.embedding_model.split("-").slice(0, 2).join("-")} />
         <StatItem label="Dimension" value={stats.embedding_dimension.toString()} />
-        <StatItem label="Vector DB" value="Chroma" />
+        <StatItem label="Vector DB" value="Qdrant" />
       </div>
     </div>
   );
