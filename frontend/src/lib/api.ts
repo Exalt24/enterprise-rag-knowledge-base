@@ -44,7 +44,70 @@ export interface HealthResponse {
   total_documents: number;
 }
 
+export interface StreamHandlers {
+  onSources?: (sources: Source[]) => void;
+  onToken?: (text: string) => void;
+  onDone?: () => void;
+}
+
 export const api = {
+  /**
+   * Token-by-token answer over SSE from POST /api/query/stream.
+   *
+   * Frame order matters: the backend emits `sources` BEFORE the first token so citations
+   * can render while the answer is still arriving. This path is deliberately STATELESS,
+   * only the question drives retrieval and nothing is retained between calls, which is
+   * why it does not take a conversation_id.
+   */
+  async queryStream(request: QueryRequest, handlers: StreamHandlers = {}): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/query/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Stream failed: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    // SSE frames are separated by a blank line. Hold a partial frame in the buffer
+    // rather than assuming one network chunk equals one frame.
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+
+      for (const frame of frames) {
+        let event = "message";
+        const dataLines: string[] = [];
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length === 0) continue;
+
+        let payload: Record<string, unknown>;
+        try {
+          payload = JSON.parse(dataLines.join("\n"));
+        } catch {
+          continue;
+        }
+
+        if (event === "sources") handlers.onSources?.((payload.sources as Source[]) ?? []);
+        else if (event === "token") handlers.onToken?.(String(payload.text ?? ""));
+        else if (event === "done") handlers.onDone?.();
+        else if (event === "error") throw new Error(String(payload.message ?? "stream error"));
+      }
+    }
+  },
+
   async query(request: QueryRequest): Promise<QueryResponse> {
     const response = await fetch(`${API_BASE_URL}/query`, {
       method: "POST",

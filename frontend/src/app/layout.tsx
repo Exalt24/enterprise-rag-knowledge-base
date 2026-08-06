@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Enterprise RAG Knowledge Base",
-  description: "Production-ready Retrieval-Augmented Generation system with hybrid search, Redis caching, and 2-tier LLM fallback. Built with FastAPI, LangChain, Chroma, and Next.js.",
+  description: "Production-ready Retrieval-Augmented Generation system with hybrid search, Redis caching, and 2-tier LLM fallback. Built with FastAPI, LangChain, Qdrant, and Next.js.",
   keywords: ["RAG", "AI", "Knowledge Base", "Vector Database", "LangChain", "FastAPI", "Next.js"],
   authors: [{ name: "Daniel Alexis Cruz" }],
   openGraph: {
