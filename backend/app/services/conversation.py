@@ -130,7 +130,10 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         ])
 
         try:
-            chain = reformulate_prompt | self.generation.ollama | StrOutputParser()
+            llm = self.generation.primary_llm
+            if llm is None:
+                raise RuntimeError("no LLM provider configured")
+            chain = reformulate_prompt | llm | StrOutputParser()
 
             standalone = chain.invoke({
                 "chat_history": messages[-6:],  # Last 3 turns (6 messages)
@@ -182,6 +185,7 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         gen_response = self.generation.generate(question, context)
 
         state["answer"] = gen_response.answer
+        state["model_used"] = gen_response.model_used
 
         # Add messages to history
         state["messages"] = messages + [
@@ -216,7 +220,8 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
             "messages": [],
             "context": "",
             "answer": "",
-            "sources": []
+            "sources": [],
+            "model_used": ""
         }
 
         # Run graph with checkpointing (memory!)
@@ -227,6 +232,7 @@ Follow-up: "What tech stack?" → Standalone: "What technology stack does AutoFl
         return {
             "answer": final_state["answer"],
             "sources": final_state["sources"],
+            "model_used": final_state.get("model_used") or self.generation.primary_model_name,
             "conversation_id": conversation_id,
             "message_count": len(final_state["messages"])
         }
