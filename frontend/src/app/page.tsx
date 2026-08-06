@@ -21,7 +21,7 @@ export default function Home() {
             Enterprise RAG Knowledge Base
           </h1>
           <p className="text-slate-400">
-            Production RAG with Llama 3, Chroma & Advanced Retrieval
+            Production RAG with Llama 3.3, Qdrant & Hybrid Retrieval
           </p>
         </div>
 
@@ -39,7 +39,7 @@ export default function Home() {
         </div>
 
         <div className="mt-12 text-center text-slate-500 text-sm">
-          <p>Next.js • FastAPI • LangChain • Llama 3 • Chroma</p>
+          <p>Next.js • FastAPI • LangChain • Llama 3.3 • Qdrant</p>
           <p className="mt-1">100% Free & Open Source</p>
         </div>
       </div>
