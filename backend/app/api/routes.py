@@ -413,8 +413,23 @@ async def health_check():
         except:
             vector_db_ok = False
 
-        # Determine overall status
-        status = "healthy" if (llm_ok and vector_db_ok) else "unhealthy"
+        # Overall status must describe THIS deployment, not a dev machine.
+        #
+        # `llm_ok` here is an OLLAMA check, and Ollama is the local-dev provider that by
+        # design does not exist in production, where generation runs on Groq. So the formula
+        # reported "unhealthy" on a service that was answering queries correctly in about
+        # two seconds, which is a health endpoint that lies in the more dangerous direction:
+        # anyone reading it concludes the deployment is broken and goes looking for a fault
+        # that is not there, or learns to ignore the field.
+        #
+        # In production the vector store is the load-bearing dependency, so that is what
+        # decides. Locally, where Ollama is genuinely the primary, keep requiring both.
+        import os as _os
+
+        if _os.getenv("RENDER") == "true":
+            status = "healthy" if vector_db_ok else "unhealthy"
+        else:
+            status = "healthy" if (llm_ok and vector_db_ok) else "unhealthy"
 
         return HealthResponse(
             status=status,
