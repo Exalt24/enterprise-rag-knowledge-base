@@ -24,13 +24,28 @@ langchain-text-splitters==1.1.2
 qdrant-client==1.18.0
 langchain-qdrant==1.1.0
 
-# Embeddings (local Sentence Transformers with CPU-only PyTorch)
-sentence-transformers==5.6.0
-# The +cpu local version exists ONLY on the PyTorch index, so this pin is what
-# actually forces the 191.8 MB CPU wheel. A bare `torch` resolves against PyPI
-# first and silently pulls the 526.6 MB CUDA build, which will not fit in 512 MB.
-torch==2.13.0+cpu
-transformers==5.13.0
+# Embeddings: ONNX, and torch is DELIBERATELY ABSENT from this file.
+#
+# torch does not fit here. Even the CPU wheel (191.8 MB installed, against 526.6 MB for the
+# default CUDA build) costs a few hundred MB of RSS just to import, before a single vector is
+# computed, and on a 512 MB instance that plus FastAPI and LangChain is enough to get the
+# process OOM-killed during import, so the port never opens and the platform restarts it in a
+# loop that looks exactly like a slow cold start.
+#
+# The non-obvious part, and the reason this works: nothing in the request path needs torch.
+# langchain_core does an OPTIONAL `from transformers import GPT2TokenizerFast` for token
+# counting, and transformers imports torch, so it arrived transitively through langchain_groq
+# rather than through anything we wrote. With transformers simply not installed, langchain_core
+# skips that import and langchain_groq still works, verified by import in the built image.
+#
+# fastembed runs the SAME all-MiniLM-L6-v2 model through onnxruntime instead, so the vectors
+# stay 384-dimensional and comparable to everything already in the Qdrant collection. No
+# re-indexing, and no torch anywhere in the deployed image.
+#
+# sentence-transformers stays in requirements.txt for local dev, where the cross-encoder
+# reranker uses it and memory is not scarce. It is skipped on Render already (see
+# advanced_retrieval.py, which only imports CrossEncoder when RENDER is unset).
+fastembed==0.7.1
 
 # Search & Retrieval
 rank-bm25==0.2.2

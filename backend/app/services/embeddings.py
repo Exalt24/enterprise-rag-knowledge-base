@@ -32,6 +32,45 @@ if TYPE_CHECKING:  # for type checkers only, never at runtime
 # first request that actually needs an embedding.
 
 
+class _FastEmbedAdapter:
+    """
+    The langchain Embeddings surface, backed by fastembed's ONNX runtime.
+
+    Only the two methods the rest of this codebase and QdrantVectorStore actually
+    call are implemented (`embed_documents`, `embed_query`), which is the whole
+    interface langchain requires of an embeddings object. Deliberately NOT a
+    subclass of langchain_core.embeddings.Embeddings: importing that is harmless
+    today, but the entire point of this class is to keep the ONNX path free of any
+    import that could reach transformers, and inheriting from a moving library
+    surface for the sake of two method names is not a trade worth making.
+
+    fastembed already L2-normalises its output, which matches
+    `normalize_embeddings=True` on the torch path, so the two are interchangeable
+    against a cosine collection.
+    """
+
+    def __init__(self, model_name: str):
+        from fastembed import TextEmbedding
+
+        # The seed data and the live Qdrant collection are 384-dimensional
+        # all-MiniLM-L6-v2 vectors. fastembed names the same weights with the
+        # publisher prefix, and a bare "all-MiniLM-L6-v2" is not in its registry.
+        canonical = (
+            model_name
+            if "/" in model_name
+            else f"sentence-transformers/{model_name}"
+        )
+        self._model = TextEmbedding(model_name=canonical)
+        self.model_name = canonical
+
+    def embed_documents(self, texts):
+        return [v.tolist() for v in self._model.embed(list(texts))]
+
+    def embed_query(self, text):
+        # `embed` is a generator over a batch; one text in, one vector out.
+        return next(iter(self._model.embed([text]))).tolist()
+
+
 class EmbeddingService:
     """
     Singleton service for generating embeddings.
@@ -62,23 +101,52 @@ class EmbeddingService:
         """
         pass
 
-    def _load(self) -> "HuggingFaceEmbeddings":
-        """Load the model on first use, then reuse it (singleton-cached)."""
+    def _load(self):
+        """
+        Load the model on first use, then reuse it (singleton-cached).
+
+        TWO BACKENDS, chosen by what is installed rather than by an env flag, because
+        the deployed image and the dev machine legitimately differ:
+
+        - ONNX via fastembed, which is what the Render image ships. torch is NOT
+          installed there, deliberately: importing it costs a few hundred MB before a
+          single vector is computed, and on a 512MB instance that is enough to get the
+          process OOM-killed during import so the port never opens.
+        - sentence-transformers via langchain_huggingface, on a dev box where torch is
+          present and memory is not scarce, so the cross-encoder reranker also works.
+
+        Both run the SAME all-MiniLM-L6-v2 weights and both L2-normalise, so vectors
+        are interchangeable and the existing Qdrant collection needs no re-indexing.
+        Verified equal to ~1e-6 by tests/test_embedding_backends_agree.py.
+        """
         if EmbeddingService._embeddings is None:
-            from langchain_huggingface import HuggingFaceEmbeddings
+            # Key off TORCH, not off langchain_huggingface. The first version of this
+            # tried importing langchain_huggingface and fell back on ImportError, which
+            # picked the WRONG branch: that package is installed in the Render image
+            # while torch is not, so the import succeeded, the torch path was chosen,
+            # and the embedding call then failed at construction. The dependency that
+            # actually decides this is torch, so ask about torch.
+            import importlib.util
 
-            print(f"[i] Loading embedding model: {settings.embedding_model}")
+            has_torch = importlib.util.find_spec("torch") is not None
 
-            EmbeddingService._embeddings = HuggingFaceEmbeddings(
-                model_name=settings.embedding_model,
-                model_kwargs={
-                    'device': 'cpu',  # Use CPU (no GPU needed for this model)
-                },
-                encode_kwargs={
-                    'normalize_embeddings': True,  # Normalize for cosine similarity
-                    'batch_size': 32  # Process 32 texts at once (faster)
-                }
-            )
+            if not has_torch:
+                print(f"[i] Loading embedding model (ONNX): {settings.embedding_model}")
+                EmbeddingService._embeddings = _FastEmbedAdapter(settings.embedding_model)
+            else:
+                from langchain_huggingface import HuggingFaceEmbeddings
+
+                print(f"[i] Loading embedding model (torch): {settings.embedding_model}")
+                EmbeddingService._embeddings = HuggingFaceEmbeddings(
+                    model_name=settings.embedding_model,
+                    model_kwargs={
+                        'device': 'cpu',  # Use CPU (no GPU needed for this model)
+                    },
+                    encode_kwargs={
+                        'normalize_embeddings': True,  # Normalize for cosine similarity
+                        'batch_size': 32  # Process 32 texts at once (faster)
+                    }
+                )
 
             print(f"[OK] Embedding model loaded!")
 
