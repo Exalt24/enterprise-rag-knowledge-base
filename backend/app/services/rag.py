@@ -192,13 +192,27 @@ class RAGService:
             retrieval_scores=final_scores
         )
 
-        # Cache the result for future queries (include retrieval scores!)
-        cache_service.set(question, {
-            "answer": response.answer,
-            "sources": sources,
-            "model_used": response.model_used,
-            "retrieval_scores": final_scores
-        }, cache_options)
+        # DO NOT CACHE A FAILED GENERATION.
+        #
+        # The cache has a one-hour TTL, and a provider outage is usually far shorter than
+        # that, so storing the failure converts a transient blip into an hour of confidently
+        # serving a wrong answer to everyone who asks the same question. This was watched
+        # happening: a query answered "All LLM providers unavailable", the fix went in, and
+        # the next identical query still returned the failure with model_used "none (cached)"
+        # even though the service was by then working perfectly.
+        #
+        # Retrieval succeeding while generation fails is exactly the case that matters here,
+        # because the sources are real and only the written answer is missing, which makes
+        # the cached entry look substantial rather than obviously broken.
+        if gen_response.model_used and gen_response.model_used != "none":
+            cache_service.set(question, {
+                "answer": response.answer,
+                "sources": sources,
+                "model_used": response.model_used,
+                "retrieval_scores": final_scores
+            }, cache_options)
+        else:
+            print("[i] Not caching: generation failed, so the next attempt should retry.")
 
         return response
 
