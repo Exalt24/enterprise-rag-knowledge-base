@@ -37,11 +37,24 @@ class EmbeddingService:
         return cls._instance
 
     def __init__(self):
-        """Initialize embeddings model (only once)"""
-        if self._embeddings is None:
+        """
+        Cheap constructor. The model is NOT loaded here.
+
+        This module is imported at process start (vector_store imports it, routes
+        import that, main imports routes), so constructing the model in __init__
+        put a multi-hundred-MB allocation ahead of uvicorn binding the port. On a
+        512 MB instance that OOM-killed the process before it could ever serve
+        /api/health, so the platform saw no open port, killed it, and restarted:
+        a crash loop that looked like a slow cold start. Load on first use instead.
+        """
+        pass
+
+    def _load(self) -> HuggingFaceEmbeddings:
+        """Load the model on first use, then reuse it (singleton-cached)."""
+        if EmbeddingService._embeddings is None:
             print(f"[i] Loading embedding model: {settings.embedding_model}")
 
-            self._embeddings = HuggingFaceEmbeddings(
+            EmbeddingService._embeddings = HuggingFaceEmbeddings(
                 model_name=settings.embedding_model,
                 model_kwargs={
                     'device': 'cpu',  # Use CPU (no GPU needed for this model)
@@ -54,9 +67,11 @@ class EmbeddingService:
 
             print(f"[OK] Embedding model loaded!")
 
+        return EmbeddingService._embeddings
+
     def get_embeddings(self) -> HuggingFaceEmbeddings:
         """Get the embeddings model instance"""
-        return self._embeddings
+        return self._load()
 
     def embed_text(self, text: str) -> List[float]:
         """
@@ -68,7 +83,7 @@ class EmbeddingService:
         Returns:
             List of floats (384-dimensional vector)
         """
-        return self._embeddings.embed_query(text)
+        return self._load().embed_query(text)
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """
@@ -80,7 +95,7 @@ class EmbeddingService:
         Returns:
             List of embedding vectors
         """
-        return self._embeddings.embed_documents(texts)
+        return self._load().embed_documents(texts)
 
 
 # Global instance (import this in other files)
