@@ -62,6 +62,16 @@ ENV PYTHONUNBUFFERED=1
 # unauthenticated on every cold wake, which is what made cold starts 8-9 minutes.
 ENV HF_HOME=/opt/hf
 ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf
+
+# CPU torch allocates a scratch arena PER THREAD and defaults to one thread per core,
+# so on a many-core host it reserves far more than a 512MB instance can spare while
+# doing nothing useful for a 22MB model. Pinning to one thread is the single largest
+# remaining saving here. TOKENIZERS_PARALLELISM silences the fork warning that the
+# tokenizer prints once these are set.
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV TOKENIZERS_PARALLELISM=false
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
     && chmod -R a+rX /opt/hf
 
