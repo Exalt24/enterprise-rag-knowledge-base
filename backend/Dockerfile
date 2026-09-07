@@ -17,10 +17,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (better caching)
-COPY requirements.txt .
+#
+# IMPORTANT: this installs requirements-render.txt, NOT requirements.txt.
+# requirements.txt is the full local freeze and pins bare `torch`, whose default
+# PyPI linux wheel bundles the CUDA runtime: 526.6 MB, on a box with 512 MB of RAM.
+# requirements-render.txt pins torch==2.13.0+cpu (191.8 MB) and drops the packages
+# that never run in production (onnxruntime, scikit-learn/scipy, pytesseract,
+# pdf2image, kubernetes, google-ai-generativelanguage). Installing the wrong file
+# OOM-kills the container during import, before uvicorn ever binds the port.
+COPY requirements-render.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies (CPU-only torch)
+RUN pip install --no-cache-dir --user -r requirements-render.txt
 
 # =============================================================================
 # Stage 2: Runtime
@@ -48,6 +56,14 @@ RUN mkdir -p /app/data/documents
 # Set Python path
 ENV PATH=/root/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
+
+# Bake the embedding model into the image.
+# Without this, the container re-downloads all-MiniLM-L6-v2 from the HF Hub
+# unauthenticated on every cold wake, which is what made cold starts 8-9 minutes.
+ENV HF_HOME=/opt/hf
+ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+    && chmod -R a+rX /opt/hf
 
 # Expose port
 EXPOSE 8001
