@@ -33,6 +33,17 @@ class Settings(BaseSettings):
         default=None,
         description="Groq API key for fast inference (required for Render deployment)"
     )
+    groq_model: str = Field(
+        default="openai/gpt-oss-120b",
+        description=(
+            "Groq chat model. A SETTING rather than a literal because Groq retires "
+            "models and the previous default, llama-3.3-70b-versatile, was retired out "
+            "from under this service. The key stayed valid and the client still "
+            "constructed, so every call simply failed and the API answered 'All LLM "
+            "providers unavailable' while looking healthy. Overridable with GROQ_MODEL "
+            "so the next retirement is an env change, not a deploy."
+        ),
+    )
     # Qdrant Cloud Vector Database
     qdrant_url: str = Field(
         default="",

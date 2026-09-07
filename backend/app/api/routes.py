@@ -396,7 +396,7 @@ async def health_check():
         try:
             if os.getenv("RENDER"):
                 from langchain_groq import ChatGroq
-                llm = ChatGroq(api_key=settings.groq_api_key, model="llama-3.3-70b-versatile")
+                llm = ChatGroq(api_key=settings.groq_api_key, model=settings.groq_model)
             else:
                 from langchain_ollama import OllamaLLM
                 llm = OllamaLLM(model=settings.ollama_model)
