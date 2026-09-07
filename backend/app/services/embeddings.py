@@ -14,9 +14,22 @@ Alternative models (uncomment to try):
 - paraphrase-MiniLM-L6-v2 (optimized for paraphrase detection)
 """
 
-from typing import List
-from langchain_huggingface import HuggingFaceEmbeddings
+from typing import TYPE_CHECKING, List
 from app.core.config import settings
+
+if TYPE_CHECKING:  # for type checkers only, never at runtime
+    from langchain_huggingface import HuggingFaceEmbeddings
+
+# NOTE: langchain_huggingface is imported INSIDE _load(), not here.
+#
+# Importing it pulls in torch, and on a 0.1-CPU free instance that import alone takes
+# about two minutes and a few hundred MB, before a single line of our own code runs.
+# Because this module is imported at process start (vector_store imports it, routes
+# import that, main imports routes), that cost landed ahead of uvicorn binding a port,
+# so the platform's port scan timed out and killed the process every time. Deferring
+# the model load was not enough on its own: the IMPORT was the expensive part, not the
+# load. With this deferred, the API binds in seconds and torch is paid for once, on the
+# first request that actually needs an embedding.
 
 
 class EmbeddingService:
@@ -49,9 +62,11 @@ class EmbeddingService:
         """
         pass
 
-    def _load(self) -> HuggingFaceEmbeddings:
+    def _load(self) -> "HuggingFaceEmbeddings":
         """Load the model on first use, then reuse it (singleton-cached)."""
         if EmbeddingService._embeddings is None:
+            from langchain_huggingface import HuggingFaceEmbeddings
+
             print(f"[i] Loading embedding model: {settings.embedding_model}")
 
             EmbeddingService._embeddings = HuggingFaceEmbeddings(
@@ -69,7 +84,7 @@ class EmbeddingService:
 
         return EmbeddingService._embeddings
 
-    def get_embeddings(self) -> HuggingFaceEmbeddings:
+    def get_embeddings(self) -> "HuggingFaceEmbeddings":
         """Get the embeddings model instance"""
         return self._load()
 
