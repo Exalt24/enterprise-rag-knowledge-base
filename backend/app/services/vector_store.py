@@ -62,9 +62,15 @@ class VectorStoreService:
 
         On failure we record the reason and come up degraded. /health reports it, retrieval
         endpoints return a clean 503, and connect() can recover later without a redeploy.
+
+        NOTHING HEAVY HAPPENS HERE ANY MORE. Connecting also loads the embedding model,
+        which is the single largest allocation in the process, and doing that at import
+        time put it AHEAD of uvicorn binding the port. On a 512MB instance the process was
+        OOM-killed mid-load, so no port ever opened, the platform saw a dead service and
+        restarted it: a crash loop that reads from outside as a very slow cold start.
+        The connection is established on first real use instead, via require().
         """
-        if self._vectorstore is None and self._init_error is None:
-            self.connect()
+        pass
 
     def connect(self) -> bool:
         """(Re)establish the Qdrant connection. Returns True when the store is usable."""
@@ -122,7 +128,16 @@ class VectorStoreService:
         return self._init_error
 
     def require(self):
-        """Raise a clear, catchable error when callers need a working store."""
+        """
+        Connect on first use, then raise a clear, catchable error if it is still unusable.
+
+        Every data path in this class calls this before touching `_vectorstore`, so it is
+        the one place a lazy connect belongs. `is_available` deliberately does NOT connect,
+        because /api/health calls it and a health check must answer immediately rather than
+        block for the length of a model load.
+        """
+        if self._vectorstore is None and self._init_error is None:
+            self.connect()
         if not self.is_available:
             raise VectorStoreUnavailable(
                 f"Vector store unavailable: {self._init_error}"
