@@ -13,8 +13,17 @@ Benefits:
 
 from typing import Optional, Iterator, Tuple
 from pydantic import BaseModel, Field
-from langchain_ollama import OllamaLLM
 from langchain_groq import ChatGroq
+
+# langchain_ollama is imported where the Ollama client is actually constructed, NOT here.
+#
+# It transitively pulls torch, which on a 0.1-CPU free instance costs about two minutes
+# and a few hundred MB at IMPORT time. This module is on the import path of every request
+# handler, so that cost landed before uvicorn could bind a port and the platform's port
+# scan killed the process before it ever served anything. Ollama is the LOCAL DEV provider
+# and is never used in production, where generation runs on Groq, so on the deployed
+# service this import was paying the single largest startup cost for a code path that
+# cannot execute there.
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
@@ -51,7 +60,11 @@ class GenerationService:
                 temperature=0.1
             ) if settings.groq_api_key else None
         else:
-            # Local dev: Ollama primary, Groq fallback
+            # Local dev: Ollama primary, Groq fallback.
+            # Imported here so the deployed service, which never takes this branch,
+            # never pays for torch at startup. See the note at the top of this file.
+            from langchain_ollama import OllamaLLM
+
             self.ollama = OllamaLLM(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
