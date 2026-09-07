@@ -56,7 +56,7 @@ class GenerationService:
             self.ollama = None
             self.groq = ChatGroq(
                 api_key=settings.groq_api_key,
-                model="llama-3.3-70b-versatile",
+                model=settings.groq_model,
                 temperature=0.1
             ) if settings.groq_api_key else None
         else:
@@ -73,7 +73,7 @@ class GenerationService:
             )
             self.groq = ChatGroq(
                 api_key=settings.groq_api_key,
-                model="llama-3.3-70b-versatile",
+                model=settings.groq_model,
                 temperature=0.1
             ) if settings.groq_api_key else None
 
@@ -116,7 +116,7 @@ Answer:""")
         if self.ollama:
             return f"ollama/{settings.ollama_model}"
         if self.groq:
-            return "groq/llama-3.3-70b-versatile"
+            return f"groq/{settings.groq_model}"
         return "none"
 
     def _generate_with_llm(self, llm, llm_name: str, query: str, context: str) -> Optional[GenerationResponse]:
@@ -174,7 +174,7 @@ Answer:""")
         if self.ollama:
             tiers.append((self.ollama, f"ollama/{settings.ollama_model}"))
         if self.groq:
-            tiers.append((self.groq, "groq/llama-3.3-70b-versatile"))
+            tiers.append((self.groq, f"groq/{settings.groq_model}"))
 
         for llm, llm_name in tiers:
             try:
@@ -238,7 +238,7 @@ Answer:""")
 
             response = self._generate_with_llm(
                 self.groq,
-                "groq/llama-3.3-70b-versatile",
+                f"groq/{settings.groq_model}",
                 query,
                 context
             )
