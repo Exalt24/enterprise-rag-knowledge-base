@@ -32,17 +32,24 @@ if TYPE_CHECKING:  # for type checkers only, never at runtime
 # first request that actually needs an embedding.
 
 
-class _FastEmbedAdapter:
+from langchain_core.embeddings import Embeddings
+
+
+class _FastEmbedAdapter(Embeddings):
     """
     The langchain Embeddings surface, backed by fastembed's ONNX runtime.
 
-    Only the two methods the rest of this codebase and QdrantVectorStore actually
-    call are implemented (`embed_documents`, `embed_query`), which is the whole
-    interface langchain requires of an embeddings object. Deliberately NOT a
-    subclass of langchain_core.embeddings.Embeddings: importing that is harmless
-    today, but the entire point of this class is to keep the ONNX path free of any
-    import that could reach transformers, and inheriting from a moving library
-    surface for the sake of two method names is not a trade worth making.
+    IT MUST SUBCLASS `Embeddings`, and the first version of this did not.
+    The reasoning then was that implementing `embed_documents` and `embed_query`
+    is the whole interface langchain needs, and that avoiding the import kept the
+    ONNX path away from anything that could reach transformers. Both halves were
+    wrong. QdrantVectorStore TYPE-CHECKS its embeddings argument and rejected a
+    structurally-identical duck type with `TypeError: Invalid embeddings type`,
+    which surfaced only in production: Qdrant connected, the collection was
+    created, and then the store refused to build, so the service came up degraded
+    and every retrieval returned 503. And the import is cheap anyway, because the
+    transformers dependency lives in `langchain_core.language_models.base`, not
+    here; a test asserts torch is still absent after importing this module.
 
     fastembed already L2-normalises its output, which matches
     `normalize_embeddings=True` on the torch path, so the two are interchangeable
@@ -50,6 +57,8 @@ class _FastEmbedAdapter:
     """
 
     def __init__(self, model_name: str):
+        import os
+
         from fastembed import TextEmbedding
 
         # The seed data and the live Qdrant collection are 384-dimensional
@@ -60,7 +69,12 @@ class _FastEmbedAdapter:
             if "/" in model_name
             else f"sentence-transformers/{model_name}"
         )
-        self._model = TextEmbedding(model_name=canonical)
+        # Use the cache the image baked, so a cold instance does not re-download
+        # the model on its first request the way production did.
+        self._model = TextEmbedding(
+            model_name=canonical,
+            cache_dir=os.environ.get("FASTEMBED_CACHE_PATH") or None,
+        )
         self.model_name = canonical
 
     def embed_documents(self, texts):
