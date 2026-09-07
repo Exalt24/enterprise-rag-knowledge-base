@@ -72,8 +72,12 @@ ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV OPENBLAS_NUM_THREADS=1
 ENV TOKENIZERS_PARALLELISM=false
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')" \
-    && chmod -R a+rX /opt/hf
+# fastembed keeps its OWN cache and ignores HF_HOME, which the first version of this
+# missed: the logs showed it "Fetching 5 files" on the first request in production even
+# though the bake had run. Pin its cache dir explicitly and warm THAT.
+ENV FASTEMBED_CACHE_PATH=/opt/fastembed
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2', cache_dir='/opt/fastembed')" \
+    && chmod -R a+rX /opt/hf /opt/fastembed
 
 # Expose port
 EXPOSE 8001
