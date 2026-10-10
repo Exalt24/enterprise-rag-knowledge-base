@@ -6,13 +6,9 @@ A retrieval-augmented generation service: upload documents, ask questions, get c
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![Next.js](https://img.shields.io/badge/next.js-16-black)
 
-## Live demo
+## Demo
 
-- **Frontend:** https://enterprise-rag-knowledge-base.vercel.app
-- **API:** https://enterprise-rag-api.onrender.com
-- **API docs:** https://enterprise-rag-api.onrender.com/docs
-
-**Free tier note:** the backend runs on Render's free instance, which sleeps after about 15 minutes without traffic, so the first request after a quiet spell can take a minute. Before the torch removal described below, a wake took minutes because the container re-downloaded the embedding model every time. I have not caught a slow wake since: on 2026-10-07 a request to [`/api/health`](https://enterprise-rag-api.onrender.com/api/health) 18 minutes after my previous one answered in 2.2 seconds, so I cannot tell whether the instance had slept. If the demo looks unresponsive, request `/api/health` and wait for `{"status":"healthy"}` before judging it.
+The hosted copy is offline: the free-tier host suspended its services in October 2026, so the links that used to be here led to empty pages and were removed. Everything runs locally from the steps below. The notes on cold starts and the wake test that used to be here described that hosted copy. The example commands further down still show its old address (enterprise-rag-api.onrender.com): point them at your own backend (http://localhost:8000) instead.
 
 ---
 
