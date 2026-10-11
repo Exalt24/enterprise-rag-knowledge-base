@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="Enterprise RAG Knowledge Base API",
-    description="Production-ready RAG system with Llama 3, Chroma, and LangChain",
+    description="RAG service with hybrid retrieval over Qdrant, streamed and cited answers, and LangChain",
     version="1.0.0",
     docs_url="/docs",  # Swagger UI
     redoc_url="/redoc",  # ReDoc UI
@@ -126,7 +126,7 @@ async def root():
         "tech_stack": {
             "llm": settings.ollama_model,
             "embedding_model": settings.embedding_model,
-            "vector_db": "Chroma",
+            "vector_db": "Qdrant",
             "framework": "FastAPI + LangChain"
         }
     }

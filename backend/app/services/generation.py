@@ -69,7 +69,8 @@ class GenerationService:
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
                 temperature=0.1,
-                timeout=30
+                timeout=settings.ollama_timeout,
+                reasoning=settings.ollama_reasoning,
             )
             self.groq = ChatGroq(
                 api_key=settings.groq_api_key,
