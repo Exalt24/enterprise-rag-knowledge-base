@@ -27,6 +27,23 @@ class Settings(BaseSettings):
         default="llama3",
         description="Ollama model name"
     )
+    ollama_timeout: int = Field(
+        default=30,
+        description=(
+            "Seconds the Ollama client waits on the server. The default of 30 suits a small "
+            "model that is already loaded; raise it (OLLAMA_TIMEOUT) for a larger local "
+            "model that has to be read into memory on the first call."
+        )
+    )
+    ollama_reasoning: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Passed to Ollama's think option. Unset (the default) leaves the model's own "
+            "behaviour. Set OLLAMA_REASONING=false for a reasoning model such as qwen3, "
+            "which otherwise spends hundreds of tokens thinking before the first answer "
+            "token, so a streamed answer sits silent for most of a minute."
+        )
+    )
 
     # Cloud API Keys
     groq_api_key: Optional[str] = Field(

@@ -1,5 +1,5 @@
 """
-Quick test to validate Ollama + LangChain + Chroma setup
+Quick test to validate Ollama + embeddings + Qdrant setup
 Run this after installing dependencies to ensure everything works
 """
 
@@ -54,18 +54,18 @@ except Exception as e:
     exit(1)
 
 # Test 3: Qdrant Vector Database
-print("3️⃣ Testing Qdrant Cloud connection...")
+print("3️⃣ Testing Qdrant connection...")
 try:
     from app.services.vector_store import vector_store
 
     # Test connection and get stats
     stats = vector_store.get_stats()
-    print(f"   ✅ Connected to Qdrant Cloud")
+    print(f"   ✅ Connected to Qdrant")
     print(f"   ✅ Collection: {stats['collection_name']}")
     print(f"   ✅ Documents: {stats['total_documents']}\n")
 
 except Exception as e:
-    print(f"   ❌ Chroma error: {e}\n")
+    print(f"   ❌ Vector store error: {e}\n")
     exit(1)
 
 # Test 4: Simple RAG Query
@@ -75,24 +75,12 @@ try:
     test_query = "What skills does Daniel have?"
     results = vector_store.search(test_query, k=2)
 
+    # Retrieval only. Answering needs documents in the collection, so ingest some
+    # first (see the README), then ask through the API or the web UI.
     if results:
-        print(f"   ✅ Search returned {len(results)} results")
-
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
-
-    rag_chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    question = "What does RAG stand for?"
-    answer = rag_chain.invoke(question)
-
-    print(f"   Question: {question}")
-    print(f"   ✅ Answer: {answer.strip()}\n")
+        print(f"   ✅ Search returned {len(results)} results\n")
+    else:
+        print("   ✅ Search ran (the collection is empty, so nothing came back yet)\n")
 
 except Exception as e:
     print(f"   ❌ RAG pipeline error: {e}\n")

@@ -1,5 +1,9 @@
 # Enterprise RAG Knowledge Base
 
+![Uploading three documents to a local knowledge base, then asking two questions and watching cited answers stream in](docs/demo.gif)
+
+*Recorded on a local stack: Qdrant in Docker, the backend and front end from this repo, and the model qwen3:14b served by Ollama (not the Groq model the deployment used). Three short made-up handbook files, about 14 chunks. A local model streams faster than the eye can follow, so the two answer stretches are shown at half speed, marked on screen.*
+
 A retrieval-augmented generation service: upload documents, ask questions, get cited answers. FastAPI and LangChain on the backend, Qdrant for vectors, vector, BM25 hybrid and optional cross-encoder retrieval, server-sent-event streaming, an OpenAI-compatible endpoint, and a Next.js front end. It runs as a portfolio deployment on free tiers.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -8,7 +12,9 @@ A retrieval-augmented generation service: upload documents, ask questions, get c
 
 ## Demo
 
-The hosted copy is offline: the free-tier host suspended its services in October 2026, so the links that used to be here led to empty pages and were removed. Everything runs locally from the steps below. The notes on cold starts and the wake test that used to be here described that hosted copy. The example commands further down still show its old address (enterprise-rag-api.onrender.com): point them at your own backend (http://localhost:8000) instead.
+The hosted copy is offline: the free-tier host suspended its services in October 2026, so the links that used to be here led to empty pages and were removed. Everything runs locally from the steps below, and the recording above is one such run. The notes on cold starts and the wake test that used to be here described that hosted copy. The example commands further down still show its old address (enterprise-rag-api.onrender.com): point them at your own backend (http://localhost:8001) instead.
+
+The sample documents used in the recording are in [`docs/sample-corpus/`](docs/sample-corpus/). They describe a fictional company, written for this repo.
 
 ---
 
@@ -82,7 +88,7 @@ Two more are implemented but not wired to the API, and can only be called as lib
 
 **Embeddings:** all-MiniLM-L6-v2 (384 dimensions). On the deployment it runs through fastembed on ONNX Runtime, and torch is deliberately absent from the image (`backend/requirements-render.txt`). Locally it runs through sentence-transformers, which also provides the cross-encoder.
 
-**Vector database:** Qdrant Cloud.
+**Vector database:** Qdrant Cloud on the deployment; a local Qdrant container works the same way.
 
 **Retrieval:** rank-bm25 for keyword search.
 
@@ -138,15 +144,20 @@ The deployed image peaks at 259 MiB with the model loaded and a real batch embed
 
 - Python 3.13+
 - Node.js 18+
+- Docker, to run Qdrant locally (or a Qdrant Cloud cluster, the free tier works)
 - Ollama ([download](https://ollama.ai/download)) for local generation, or a Groq API key
-- A Qdrant Cloud cluster (the free tier works)
 - Redis (optional, for caching and rate limiting)
 
-### 1. Pull the local model
+This is the path the recording above was made with. The first backend start downloads the embedding model, and `pip install` pulls torch, so allow a few minutes.
+
+### 1. Start Qdrant and pull a model
 
 ```bash
+docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant
 ollama pull llama3
 ```
+
+The code defaults to `llama3`. Any Ollama model works through the settings in step 2: the recording used `qwen3:14b`.
 
 ### 2. Backend
 
@@ -155,14 +166,22 @@ cd backend
 python -m venv venv
 source venv/Scripts/activate    # Windows Git Bash. PowerShell: .\venv\Scripts\activate
 pip install -r requirements.txt
+```
 
-cp .env.example .env
-# Edit .env:
-# - QDRANT_URL and QDRANT_API_KEY (required)
-# - GROQ_API_KEY (required on Render, optional locally)
-# - REDIS_URL (optional)
+Settings are environment variables or a `backend/.env` file (`.env.example` lists the cloud ones). For a fully local run:
 
-python test_setup.py            # checks the setup
+```bash
+QDRANT_URL=http://localhost:6333     # no QDRANT_API_KEY needed for a local container
+OLLAMA_MODEL=llama3                  # the model you pulled
+# Only for a reasoning model such as qwen3, which otherwise "thinks" for a long
+# time before the first answer token. A larger model that has to be loaded on its
+# first call may also need a longer timeout than the default 30 seconds:
+OLLAMA_REASONING=false
+OLLAMA_TIMEOUT=300
+```
+
+```bash
+python test_setup.py            # checks Ollama, the embedding model and Qdrant
 python -m app.main              # http://localhost:8001, docs at /docs
 ```
 
@@ -176,7 +195,19 @@ npm install
 npm run dev                     # http://localhost:3000
 ```
 
-### 4. Use it
+For a faster page, `npm run build && npm run start` serves the production build (the recording used that, with `NEXT_PUBLIC_API_URL` set when building).
+
+### 4. Load the sample documents
+
+Drop the three files from `docs/sample-corpus/` onto the upload panel, or from the repo root:
+
+```bash
+for f in docs/sample-corpus/*.md; do curl -X POST http://localhost:8001/api/ingest -F "file=@$f"; done
+```
+
+That is 14 chunks (5, 5 and 4). Then ask, for example, "How many weeks of parental leave do I get, and can I split them?" or "What should I do if my laptop is stolen?".
+
+### 5. Use it
 
 Upload documents in the web UI (PDF, DOCX, TXT, MD) and ask questions in the chat. The UI has a hybrid search toggle and a cross-encoder reranking toggle; the reranking toggle is disabled in the deployed UI. Or use the API:
 
@@ -219,27 +250,38 @@ docs, scores = advanced_retrieval.multi_query_search(query="What are the key fea
 `POST /api/query/stream` emits a `sources` frame before the first token, so citations render while the answer is still arriving, then `token` frames, then `done`. It is the stateless route: only the newest question drives retrieval, nothing is kept between calls, and it bypasses the response cache on purpose, because replaying a cached string as synthetic tokens would report a model that never ran for that request.
 
 ```bash
-curl -N -X POST https://enterprise-rag-api.onrender.com/api/query/stream \
+curl -N -X POST http://localhost:8001/api/query/stream \
   -H "Content-Type: application/json" \
-  -d '{"question":"How does hybrid search work?","k":3,"use_hybrid_search":true}'
+  -d '{"question":"How much is the learning budget?","k":3,"use_hybrid_search":true}'
 ```
+
+This is the output from the sample documents, run locally on 2026-10-11 (the `sources` frame is shortened here; the real one carries a 100-character preview for each of the three chunks, and the token frames are cut down to a few):
 
 ```
 event: sources
-data: {"sources": [...], "num_sources": 3}
+data: {"sources": [{"file_name": "larkspur-employee-handbook.md", "page": null, "content_preview": "## Learning budget\n\nEvery employee has a learning budget of 1,500 euros per year for courses, books ..."}, ...], "num_sources": 3}
 
 event: token
-data: {"text": "According"}
+data: {"text": "The"}
+
+event: token
+data: {"text": " learning"}
 ...
+event: token
+data: {"text": "."}
+
 event: done
 data: {"finish_reason": "stop"}
 ```
+
+The web UI lists the file name of each source under the answer. It does not show the preview text, so there is nothing to click open; the preview is only in the API response.
 
 `POST /api/v1/chat/completions` speaks the OpenAI shape in both forms, streaming (`chat.completion.chunk` frames ending in `data: [DONE]`) and blocking (`chat.completion`):
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="https://enterprise-rag-api.onrender.com/api/v1", api_key="not-used")
+# The service does not check keys, but the client wants one: set OPENAI_API_KEY to any value.
+client = OpenAI(base_url="http://localhost:8001/api/v1")
 stream = client.chat.completions.create(
     model="enterprise-rag",
     messages=[{"role": "user", "content": "How does hybrid search work?"}],
@@ -385,11 +427,7 @@ python tests/eval_retrieval.py --base-url http://localhost:8001/api
 
 ### Docker
 
-```bash
-docker-compose up -d
-docker-compose logs -f backend
-docker-compose down
-```
+`docker-compose.yml` predates the move from Chroma to Qdrant: it still sets a Chroma directory, defines no Qdrant service, and its port and front-end API address do not match the defaults above. I have not run it since, so treat it as unmaintained and use the step-by-step run in Quick start, which I did run. The single `docker run` for Qdrant in step 1 is the only Docker piece that path needs.
 
 ### Backend on Render
 
@@ -416,13 +454,16 @@ Local development:
 ```bash
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
-QDRANT_URL=https://your-cluster.cloud.qdrant.io
-QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_URL=http://localhost:6333   # or https://your-cluster.cloud.qdrant.io
+QDRANT_API_KEY=your_qdrant_api_key # Qdrant Cloud only
 ```
 
 Optional:
 
 ```bash
+OLLAMA_TIMEOUT=30                  # seconds the Ollama client waits; raise it for a big local model
+OLLAMA_REASONING=false             # unset by default; false stops a reasoning model such as qwen3 from thinking first
+QDRANT_COLLECTION=enterprise_rag   # collection name
 GROQ_API_KEY=gsk_...               # cloud generation, required on Render
 GROQ_MODEL=openai/gpt-oss-120b     # change this when Groq retires a model
 REDIS_URL=redis://localhost:6379   # cache and rate limiter
@@ -447,6 +488,9 @@ The deployment runs on free tiers: Groq for generation, Qdrant Cloud for vectors
 - Conversation memory is in-process and is lost on restart.
 - The tests are manual scripts, and there is no CI test run.
 - CORS is open to every origin.
+- `GET /api/health` makes a real call to the language model to check it, and the handler runs on the event loop, so with a slow or cold local model it can hold up every other request until it returns. The web UI never calls it. I found this while setting up the recording, and have not changed it.
+- `DELETE /api/documents/{name}` removes the chunks but reports `chunks_deleted: 0`; the count is wrong, the deletion is not.
+- The recording used a local Ollama model and a local Qdrant container, not Groq and Qdrant Cloud, so it shows the pipeline working and says nothing about how the hosted setup answered.
 
 ---
 
