@@ -1,0 +1,8 @@
+# Line endings and binaries, enforced on every machine (autocrlf corrupted PDFs and left shell scripts and Dockerfiles CRLF, 2026-10-13).
+Dockerfile* text eol=lf
+.env* text eol=lf
+*.env text eol=lf
+*.gif binary
+*.ico binary
+/backend/Dockerfile text eol=lf
+/frontend/Dockerfile text eol=lf
