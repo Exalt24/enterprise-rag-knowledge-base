@@ -63,7 +63,7 @@ langchain-text-splitters==1.1.2
 langgraph==1.2.9
 langgraph-checkpoint==4.1.1
 langgraph-prebuilt==1.1.0
-langgraph-sdk==0.4.2
+langgraph-sdk==0.4.4
 langsmith==0.10.1
 lxml==6.1.1
 markdown-it-py==4.2.0
