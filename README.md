@@ -1,507 +1,87 @@
 # Enterprise RAG Knowledge Base
 
+FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming and an OpenAI-compatible endpoint.
+
 ![Uploading three documents to a local knowledge base, then asking two questions and watching cited answers stream in](docs/demo.gif)
 
-*Recorded on a local stack: Qdrant in Docker, the backend and front end from this repo, and the model qwen3:14b served by Ollama (not the Groq model the deployment used). Three short made-up handbook files, about 14 chunks. A local model streams faster than the eye can follow, so the two answer stretches are shown at half speed, marked on screen.*
+*Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. Three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen.*
 
-A retrieval-augmented generation service: upload documents, ask questions, get cited answers. FastAPI and LangChain on the backend, Qdrant for vectors, vector, BM25 hybrid and optional cross-encoder retrieval, server-sent-event streaming, an OpenAI-compatible endpoint, and a Next.js front end. It runs as a portfolio deployment on free tiers.
+**Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed).
 
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Python](https://img.shields.io/badge/python-3.13-blue)
-![Next.js](https://img.shields.io/badge/next.js-16-black)
+[![keep-alive workflow](https://github.com/Exalt24/enterprise-rag-knowledge-base/actions/workflows/keep-alive.yml/badge.svg)](https://github.com/Exalt24/enterprise-rag-knowledge-base/actions/workflows/keep-alive.yml)
 
-## Demo
+The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below, and the recording above is one such run.
 
-The hosted copy is offline: the free-tier host suspended its services in October 2026, so the links that used to be here led to empty pages and were removed. Everything runs locally from the steps below, and the recording above is one such run. The notes on cold starts and the wake test that used to be here described that hosted copy. The example commands further down still show its old address (enterprise-rag-api.onrender.com): point them at your own backend (http://localhost:8001) instead.
+## What it is and why
 
-The sample documents used in the recording are in [`docs/sample-corpus/`](docs/sample-corpus/). They describe a fictional company, written for this repo.
-
----
+Upload documents (PDF, DOCX, TXT, Markdown), ask questions, get answers with citations. The backend is FastAPI and LangChain over Qdrant, the front end is Next.js. I built it to see where a retrieval pipeline actually fails, so most of this README is about the failures.
 
 ## What broke
 
-The best parts of this repo are the failures I had to diagnose, so they come first.
+- **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match scored 0.893. Every test stayed green because they only checked that results came back. The fix uses the cosine score directly, and `backend/tests/test_hybrid_ranking.py` now fails on the original line. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent) because it predated the fix and was never re-measured.
+- **A deploy that looked like a slow cold start.** The 512 MB free instance was OOM-killed on import because the default Linux torch wheel is 526.6 MB. The fix was to drop torch from the deployed image: fastembed runs the same all-MiniLM-L6-v2 weights through ONNX Runtime, so the vectors already in Qdrant stayed valid. Measured under a real 512 MB cap: import time about two minutes down to 1.87 seconds, peak memory 438 MiB down to 259 MiB.
+- **A retired model.** Groq retired the model this service named in seven places. The key stayed valid and the client still built, so calls failed while the health endpoint said the vector database was connected. The model is now one setting, `GROQ_MODEL`.
 
-### The retrieval numbers I retracted
-
-An earlier revision of this README advertised an accuracy series for vector, hybrid and reranked retrieval (about 40, 60 and 67.7 percent). Those figures predate a scoring bug I found on 2026-08-03, and they were never re-validated through the corrected code, so they are gone rather than restated.
-
-The bug: `hybrid_search` applied `1 / (1 + score)` to "convert distance to similarity", but the collection uses cosine distance, where Qdrant already returns a similarity and higher is better. That inverted the ranking. A 0.82 match scored 0.549 while a 0.12 match scored 0.893, so the default retrieval path was promoting the least relevant chunks. It showed up as "I don't have that information" on questions that plain vector search answered correctly. The fix is to use the cosine score directly, clamped to 0 to 1. See [Retrieval accuracy](#retrieval-accuracy) for what I measured afterwards.
-
-### What broke in deployment
-
-The first deployment crash-looped on Render's 512 MB free instance, and from outside it looked exactly like a slow cold start. It took several rounds to find the real causes:
-
-1. **The wrong torch.** The Dockerfile installed `requirements.txt`, which pins bare `torch`, and the default PyPI Linux wheel is the CUDA build at 526.6 MB. On a 512 MB instance the process was OOM-killed during import, before uvicorn bound a port, so the platform saw no open port and restarted it. Render builds from the Dockerfile and ignores the build command, which is why the lightweight requirements file that already existed was never used.
-2. **The model loaded before the port opened.** Connecting the vector store loaded the embedding model at import time, ahead of the port bind. The model now loads on first use.
-3. **The model was downloaded on every wake.** The container re-fetched all-MiniLM-L6-v2 from the HuggingFace Hub each time the instance woke, which is where the old "8 to 9 minute cold start" came from. The model is now baked into the image.
-4. **torch arrived through a library I never imported.** `langchain_groq` pulls `langchain_core`, which does an optional `from transformers import GPT2TokenizerFast` for token counting, and `transformers` imports torch. Nothing in the request path needs it. I tried the CPU wheel (191.8 MB) and a one-thread pin, and neither was enough.
-5. **The fix: no torch at all.** The deployed image uses fastembed, which runs the same all-MiniLM-L6-v2 weights through ONNX Runtime, so the 384-dimension vectors already in Qdrant stay valid and nothing was re-indexed. `transformers` is simply not installed, `langchain_core` skips the optional import, and `langchain_groq` still works. See `backend/requirements-render.txt`, which explains the whole chain in comments.
-
-Measured in the built image under a real 512 MB cap, before and after: import time about two minutes down to 1.87 seconds, peak memory 438 MiB down to 259 MiB, and `/api/health` answering 200 in 0.14 seconds. Before the change the platform OOM-killed it.
-
-Two smaller ones from the same week. The first ONNX adapter did not subclass LangChain's `Embeddings`, and `QdrantVectorStore` type-checks that argument, so on the deployment Qdrant connected, the collection was created, and then the store refused to build and every retrieval returned 503 under a startup log that read as healthy. The backend choice also first keyed off whether `langchain_huggingface` would import, which picked the wrong branch, because that package is installed in the image while torch is not. It now keys off torch.
-
-### The model retirement
-
-In early September 2026 Groq retired `llama-3.3-70b-versatile`, which this service named as a literal in seven places across four files. The API key stayed valid and the client still constructed, so every call failed, the fallback chain reported "All LLM providers unavailable", and the health endpoint still said the vector database was connected. The same retirement took the [multi-agent research demo](https://github.com/Exalt24/multi-agent-research) down the same day. The model is now a setting (`GROQ_MODEL`, default `openai/gpt-oss-120b`), so the next retirement is an environment change.
-
-Two defects turned up while proving that fix. A failed generation was cached for an hour next to successful ones, so a short provider outage became an hour of serving "unavailable"; failed generations are no longer cached. And `/api/health` reported "unhealthy" on the deployment because it required an Ollama check, and Ollama is the local-development provider that does not exist there; on the deployment the vector store now decides the status.
-
----
-
-## Features
-
-### Retrieval
-
-Three strategies are available through the API:
-
-- **Vector search:** cosine similarity over 384-dimension embeddings.
-- **Hybrid search (the default):** each of the top 2k vector hits scores its cosine similarity times 0.7, and every chunk that BM25 also returns gets a flat 0.15 added (a chunk found only by BM25 scores 0.15). The best k by that score are returned. So BM25 here is a keyword-agreement bonus, not a normalised BM25 score.
-- **Cross-encoder reranking:** a neural rescoring pass using `cross-encoder/ms-marco-MiniLM-L-6-v2`. **It does not run on the free-tier deployment**: the module is not imported when `RENDER` is set, and the call returns the hybrid ordering unchanged. It works locally.
-
-Two more are implemented but not wired to the API, and can only be called as library functions: **HyDE** (hypothetical document embeddings) and **multi-query** (LLM-generated query variations).
-
-### Documents
-
-- PDF, DOCX, TXT and Markdown, with optional OCR for scanned PDFs (local only).
-- Recursive chunking at 500 characters with 50 overlap.
-- Metadata per file: word count, upload date, file size, page numbers.
-- File management: list and delete documents.
-
-### Serving
-
-- **Streaming:** `POST /api/query/stream` sends server-sent events, with citations before the first token.
-- **OpenAI-compatible:** `POST /api/v1/chat/completions`, streaming and blocking, so an OpenAI client only needs its `base_url` repointed.
-- **Generation:** Groq on the deployment. Locally, Ollama is tried first and Groq is the fallback.
-- **Cache:** Redis, keyed on the question plus the retrieval options, with a one-hour TTL and an in-memory fallback.
-- **Rate limiting:** a Redis-backed sliding window per IP and path: 60 requests per minute on `/api/query`, 10 on `/api/ingest`, 120 on every other path except health and docs. Without Redis the limiter is off.
-- **Conversation memory:** pass a `conversation_id` to `/api/query` and follow-ups are rewritten into standalone questions before retrieval.
-
----
-
-## Tech stack
-
-**Backend:** FastAPI, LangChain, LangGraph (conversation memory), Pydantic, Python 3.13.
-
-**LLMs:** Groq, default `openai/gpt-oss-120b`, set with `GROQ_MODEL`. Ollama (llama3) for local development.
-
-**Embeddings:** all-MiniLM-L6-v2 (384 dimensions). On the deployment it runs through fastembed on ONNX Runtime, and torch is deliberately absent from the image (`backend/requirements-render.txt`). Locally it runs through sentence-transformers, which also provides the cross-encoder.
-
-**Vector database:** Qdrant Cloud on the deployment; a local Qdrant container works the same way.
-
-**Retrieval:** rank-bm25 for keyword search.
-
-**Cache and rate limiter:** Redis.
-
-**Documents:** pypdf, python-docx, pytesseract and pdf2image (OCR, local only).
-
-**Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS.
-
-**Deployment:** Render (backend, free 512 MB instance), Vercel (frontend), Docker.
-
----
+The full write-up, including the design decisions, is in [docs/engineering-notes.md](docs/engineering-notes.md).
 
 ## Measured results
 
-<a id="retrieval-accuracy"></a>
-### Retrieval accuracy
-
-Measured on 2026-08-03 against the live deployment with `backend/tests/eval_retrieval.py`: 20 questions over a 26-chunk corpus, scored hit@k on whether the chunk containing the answer was retrieved at all.
+20 questions over a 26-chunk corpus, run on 2026-08-03 against the then-live deployment with `backend/tests/eval_retrieval.py`:
 
 | hit@k | vector only | hybrid |
 |---|---|---|
 | k=1 | 85.0% | 90.0% |
 | k=3 | 100% | 100% |
 
-- k=3 is saturated, so this benchmark is too easy to separate the strategies. k=1 is the number that discriminates.
-- Hybrid beat plain vector by 5 points at k=1, which is one question out of twenty. That is a direction, not a settled result.
-- A third column in the earlier measurement, "hybrid + rerank", is not reported here. Reranking does not run on the deployment (see above), so that column was the hybrid ordering again and said nothing about the reranker. I have not measured it locally.
-- The corpus is small, and the live collection has changed since (it now holds 93 chunks from other documents), so the harness needs the original corpus re-ingested to reproduce these numbers. It reads the stored chunk text from `/documents`, or from Qdrant directly when `QDRANT_URL` and `QDRANT_API_KEY` are set:
+Hybrid beat vector by one question out of twenty: a direction, not a settled result. A cached repeat of a query took 0.28 seconds against 2.7 for the first call (curl from my machine, 2026-10-07, network included). Reranking is not measured.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["Next.js front end"] --> API["FastAPI"]
+    API --> R["Retrieval<br/>vector + BM25 hybrid<br/>optional cross-encoder"]
+    R --> Q[("Qdrant")]
+    API --> C[("Redis<br/>cache + rate limit")]
+    API --> G["Generation<br/>Groq, or Ollama locally"]
+    G -- "sources, then tokens (SSE)" --> UI
+```
+
+Hybrid retrieval (the default) scores the top 2k vector hits at cosine times 0.7 and adds a flat 0.15 to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. Other endpoints: `POST /api/query/stream` (citations arrive before the first token) and `POST /api/v1/chat/completions` (repoint an OpenAI client's `base_url`).
+
+## Run it
 
 ```bash
-python backend/tests/eval_retrieval.py --base-url https://enterprise-rag-api.onrender.com/api
+docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant && ollama pull llama3
+cd backend && python -m venv venv && source venv/Scripts/activate && pip install -r requirements.txt
+QDRANT_URL=http://localhost:6333 python -m app.main            # http://localhost:8001, docs at /docs
+cd ../frontend && npm install && echo "NEXT_PUBLIC_API_URL=http://localhost:8001/api" > .env.local && npm run dev
 ```
 
-### Cache
+Sample documents are in [`docs/sample-corpus/`](docs/sample-corpus/). Full steps, API examples, environment variables and deployment are in [docs/reference.md](docs/reference.md). The first backend start downloads the embedding model.
 
-Two identical `POST /api/query` calls with a question that had not been asked before, timed with curl from my machine on 2026-10-07: 2.7 seconds for the first, 0.28 seconds for the second (a Redis hit). Both include network time.
+## Tests
 
 ```bash
-curl -s -o /dev/null -w "%{time_total}s\n" -X POST https://enterprise-rag-api.onrender.com/api/query \
-  -H "Content-Type: application/json" -d '{"question":"Why does the service stream citations before the first token?","k":3}'
-```
-
-### Memory
-
-The deployed image peaks at 259 MiB with the model loaded and a real batch embedded, under a 512 MB cap (see [What broke in deployment](#what-broke-in-deployment)).
-
----
-
-## Quick start
-
-### Prerequisites
-
-- Python 3.13+
-- Node.js 18+
-- Docker, to run Qdrant locally (or a Qdrant Cloud cluster, the free tier works)
-- Ollama ([download](https://ollama.ai/download)) for local generation, or a Groq API key
-- Redis (optional, for caching and rate limiting)
-
-This is the path the recording above was made with. The first backend start downloads the embedding model, and `pip install` pulls torch, so allow a few minutes.
-
-### 1. Start Qdrant and pull a model
-
-```bash
-docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant
-ollama pull llama3
-```
-
-The code defaults to `llama3`. Any Ollama model works through the settings in step 2: the recording used `qwen3:14b`.
-
-### 2. Backend
-
-```bash
-cd backend
-python -m venv venv
-source venv/Scripts/activate    # Windows Git Bash. PowerShell: .\venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-Settings are environment variables or a `backend/.env` file (`.env.example` lists the cloud ones). For a fully local run:
-
-```bash
-QDRANT_URL=http://localhost:6333     # no QDRANT_API_KEY needed for a local container
-OLLAMA_MODEL=llama3                  # the model you pulled
-# Only for a reasoning model such as qwen3, which otherwise "thinks" for a long
-# time before the first answer token. A larger model that has to be loaded on its
-# first call may also need a longer timeout than the default 30 seconds:
-OLLAMA_REASONING=false
-OLLAMA_TIMEOUT=300
-```
-
-```bash
-python test_setup.py            # checks Ollama, the embedding model and Qdrant
-python -m app.main              # http://localhost:8001, docs at /docs
-```
-
-### 3. Frontend
-
-```bash
-cd frontend
-npm install
-# Create .env.local containing:
-# NEXT_PUBLIC_API_URL=http://localhost:8001/api
-npm run dev                     # http://localhost:3000
-```
-
-For a faster page, `npm run build && npm run start` serves the production build (the recording used that, with `NEXT_PUBLIC_API_URL` set when building).
-
-### 4. Load the sample documents
-
-Drop the three files from `docs/sample-corpus/` onto the upload panel, or from the repo root:
-
-```bash
-for f in docs/sample-corpus/*.md; do curl -X POST http://localhost:8001/api/ingest -F "file=@$f"; done
-```
-
-That is 14 chunks (5, 5 and 4). Then ask, for example, "How many weeks of parental leave do I get, and can I split them?" or "What should I do if my laptop is stolen?".
-
-### 5. Use it
-
-Upload documents in the web UI (PDF, DOCX, TXT, MD) and ask questions in the chat. The UI has a hybrid search toggle and a cross-encoder reranking toggle; the reranking toggle is disabled in the deployed UI. Or use the API:
-
-- `POST /api/query`, with an optional `conversation_id` for multi-turn memory
-- `POST /api/query/stream`, SSE and stateless
-- `POST /api/v1/chat/completions`, OpenAI-compatible
-- `POST /api/ingest`, `GET /api/stats`, `GET /api/documents`, `DELETE /api/documents/{name}`, `GET /api/health`
-
----
-
-## Advanced usage
-
-### Retrieval strategies as library calls
-
-```python
-from app.services.rag import rag_service
-
-# Vector only
-rag_service.query(question="What are the key features?", k=3, use_hybrid_search=False)
-
-# Hybrid, the default
-rag_service.query(question="What are the key features?", k=3, use_hybrid_search=True)
-
-# Hybrid plus the cross-encoder (local only)
-rag_service.query(question="What are the key features?", k=3,
-                  use_hybrid_search=True, use_reranking=True)
-```
-
-HyDE and multi-query are not exposed through the API:
-
-```python
-from app.services.advanced_retrieval import advanced_retrieval
-
-docs, scores = advanced_retrieval.hyde_search(query="What are the key features?", k=3, with_scores=True)
-docs, scores = advanced_retrieval.multi_query_search(query="What are the key features?", k=3, with_scores=True)
-```
-
-### Streaming and the OpenAI-compatible endpoint
-
-`POST /api/query/stream` emits a `sources` frame before the first token, so citations render while the answer is still arriving, then `token` frames, then `done`. It is the stateless route: only the newest question drives retrieval, nothing is kept between calls, and it bypasses the response cache on purpose, because replaying a cached string as synthetic tokens would report a model that never ran for that request.
-
-```bash
-curl -N -X POST http://localhost:8001/api/query/stream \
-  -H "Content-Type: application/json" \
-  -d '{"question":"How much is the learning budget?","k":3,"use_hybrid_search":true}'
-```
-
-This is the output from the sample documents, run locally on 2026-10-11 (the `sources` frame is shortened here; the real one carries a 100-character preview for each of the three chunks, and the token frames are cut down to a few):
-
-```
-event: sources
-data: {"sources": [{"file_name": "larkspur-employee-handbook.md", "page": null, "content_preview": "## Learning budget\n\nEvery employee has a learning budget of 1,500 euros per year for courses, books ..."}, ...], "num_sources": 3}
-
-event: token
-data: {"text": "The"}
-
-event: token
-data: {"text": " learning"}
-...
-event: token
-data: {"text": "."}
-
-event: done
-data: {"finish_reason": "stop"}
-```
-
-The web UI lists the file name of each source under the answer. It does not show the preview text, so there is nothing to click open; the preview is only in the API response.
-
-`POST /api/v1/chat/completions` speaks the OpenAI shape in both forms, streaming (`chat.completion.chunk` frames ending in `data: [DONE]`) and blocking (`chat.completion`):
-
-```python
-from openai import OpenAI
-# The service does not check keys, but the client wants one: set OPENAI_API_KEY to any value.
-client = OpenAI(base_url="http://localhost:8001/api/v1")
-stream = client.chat.completions.create(
-    model="enterprise-rag",
-    messages=[{"role": "user", "content": "How does hybrid search work?"}],
-    stream=True,
-)
-for chunk in stream:
-    print(chunk.choices[0].delta.content or "", end="")
-```
-
-Two implementation notes. The first chunk is buffered before anything is emitted, because providers almost always fail on the opening call and buffering lets the fallback take over instead of stranding the client mid-answer. And `X-Accel-Buffering: no` is mandatory on Render: without it the platform proxy buffers the whole response and streaming does nothing, which looks fine on localhost.
-
-### Conversation memory
-
-`POST /api/query` with a `conversation_id` uses a LangGraph path that rewrites a follow-up into a standalone question from the chat history before retrieval runs, since you cannot vector-match a pronoun:
-
-```
-"What is hybrid search?"        -> answers with the weighting
-"What weighting does it use?"   -> rewritten to "What weighting does hybrid search use?"
-```
-
-The checkpointer is `MemorySaver`, so history lives in the process and does not survive a restart. Memory is also off on the streaming route by design.
-
-### OCR for scanned PDFs (local only)
-
-```python
-from app.services.document_parser import DocumentParser
-
-docs = DocumentParser.parse("scanned_document.pdf", use_ocr=True)
-```
-
-OCR needs system binaries: `tesseract-ocr` and `poppler-utils` on Debian or Ubuntu, `brew install tesseract poppler` on macOS, or the [UB-Mannheim Windows build](https://github.com/UB-Mannheim/tesseract/wiki).
-
----
-
-## API examples
-
-```bash
-# Query with the advanced options
-curl -X POST http://localhost:8001/api/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "What technologies are mentioned?",
-    "k": 3,
-    "include_sources": true,
-    "use_hybrid_search": true,
-    "use_reranking": false,
-    "optimize_query": true
-  }'
-
-# Upload a document
-curl -X POST http://localhost:8001/api/ingest -F "file=@document.pdf"
-
-# Statistics and health
-curl http://localhost:8001/api/stats
-curl http://localhost:8001/api/health
-```
-
----
-
-## Project structure
-
-```
-enterprise-rag-knowledge-base/
-├── backend/
-│   ├── app/
-│   │   ├── api/             # routes.py, schemas.py
-│   │   ├── core/            # config.py, rate_limiter.py
-│   │   ├── services/
-│   │   │   ├── document_parser.py     # PDF, DOCX, TXT, Markdown, OCR
-│   │   │   ├── chunking.py            # recursive splitter, 500 / 50
-│   │   │   ├── embeddings.py          # fastembed (ONNX) or sentence-transformers
-│   │   │   ├── vector_store.py        # Qdrant client
-│   │   │   ├── retrieval.py           # vector retrieval
-│   │   │   ├── advanced_retrieval.py  # hybrid, HyDE, multi-query, reranking
-│   │   │   ├── generation.py          # Groq / Ollama
-│   │   │   ├── rag.py                 # orchestration
-│   │   │   ├── cache.py               # Redis and in-memory cache
-│   │   │   ├── conversation.py        # multi-turn memory
-│   │   │   ├── file_management.py
-│   │   │   └── ingestion.py
-│   │   └── main.py
-│   ├── tests/                         # see Testing
-│   ├── requirements.txt               # full local set
-│   ├── requirements-render.txt        # deployed image, no torch
-│   ├── keep_alive.py                  # pings Qdrant and Redis so the free tiers are not reclaimed
-│   └── Dockerfile
-├── frontend/                          # Next.js app
-├── .github/workflows/keep-alive.yml   # runs keep_alive.py every 5 days
-├── docker-compose.yml
-├── SYSTEM-KNOWLEDGE.md                # design notes
-└── README.md
-```
-
----
-
-## Testing
-
-The tests are scripts you run by hand against a local backend, not a pytest suite wired into CI.
-
-```bash
-cd backend
-
-# Ingestion pipeline
-python -c "import sys; sys.path.insert(0, '.'); from tests.test_ingestion import test_complete_pipeline; test_complete_pipeline()"
-
-# RAG query path
-python -c "import sys; sys.path.insert(0, '.'); from tests.test_rag import test_rag_system; test_rag_system()"
-
-# API endpoints, rate limiting
-python tests/test_api.py
-python tests/test_rate_limiting.py
-
-# Retrieval accuracy, 20 questions, against a running API
+cd backend && pytest tests/test_hybrid_ranking.py     # 3 passed, no live service
 python tests/eval_retrieval.py --base-url http://localhost:8001/api
 ```
 
----
+The other files in `backend/tests/` are scripts run by hand against a local backend. There is no CI test run, so there is no CI badge.
 
-## Design decisions
+## Limits and not done
 
-**Qdrant Cloud over Chroma.** The way I used Chroma, it kept its data on local disk, and Render's filesystem is ephemeral. Qdrant keeps the vectors remotely, supports metadata filtering, and has a free tier. I have not benchmarked the two against each other. pgvector would be the other option I would try.
+- Cross-encoder reranking works locally only, and I have not measured it. HyDE and multi-query exist as library functions, not API routes, and are not evaluated.
+- The eval is 20 questions on a small corpus: a regression check, not a benchmark. The corpus must be re-ingested to reproduce it.
+- Conversation memory is in-process and lost on restart.
+- CORS allows every origin. `GET /api/health` makes a real model call and can stall other requests on a slow local model.
+- `docker-compose.yml` predates the move to Qdrant and is unmaintained.
+- `DELETE /api/documents/{name}` deletes the chunks but reports `chunks_deleted: 0`.
 
-**Local embeddings over a hosted embedding API.** The HuggingFace Inference API timed out with 504s. Running all-MiniLM-L6-v2 in-process removes the network dependency, costs nothing and keeps document text on the server. The cost was memory, which is what the deployment story above is about.
+## Stack
 
-**Groq in the cloud, Ollama locally.** Both serve open-weight models and both are free to use at this scale. Groq is the only provider on the deployment, because Ollama is not installed there.
-
-**500-character chunks with 50 overlap.** A common starting range that keeps enough context per chunk without diluting it. I did not tune it against the eval set.
-
-**Hybrid by default.** Vector search misses exact keywords, and BM25 catches them. The measured gain is small (see above).
-
----
-
-## Behaviour worth knowing
-
-- File upload keeps only the base name of the uploaded filename, and uploads are capped at 10 MB (`MAX_FILE_SIZE_MB`).
-- CORS allows all origins (`allow_origins=["*"]`). That is fine for a demo and should be narrowed before real use.
-- If Qdrant is unreachable at start-up the API still boots in a degraded mode, and the retrieval endpoints return 503 until it recovers.
-- Each answer carries a `model_used` field, and `/api/stats` reports the model that is actually configured.
-
----
-
-## Deployment
-
-### Docker
-
-`docker-compose.yml` predates the move from Chroma to Qdrant: it still sets a Chroma directory, defines no Qdrant service, and its port and front-end API address do not match the defaults above. I have not run it since, so treat it as unmaintained and use the step-by-step run in Quick start, which I did run. The single `docker run` for Qdrant in step 1 is the only Docker piece that path needs.
-
-### Backend on Render
-
-Render builds from the backend Dockerfile, which installs `requirements-render.txt`. Set these environment variables:
-
-```
-RENDER=true
-GROQ_API_KEY=your_groq_key
-QDRANT_URL=your_qdrant_cloud_url
-QDRANT_API_KEY=your_qdrant_api_key
-REDIS_URL=your_redis_url
-```
-
-### Frontend on Vercel
-
-Set the root directory to `frontend` and add `NEXT_PUBLIC_API_URL=https://your-backend.onrender.com/api`.
-
----
-
-## Environment variables
-
-Local development:
-
-```bash
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-QDRANT_URL=http://localhost:6333   # or https://your-cluster.cloud.qdrant.io
-QDRANT_API_KEY=your_qdrant_api_key # Qdrant Cloud only
-```
-
-Optional:
-
-```bash
-OLLAMA_TIMEOUT=30                  # seconds the Ollama client waits; raise it for a big local model
-OLLAMA_REASONING=false             # unset by default; false stops a reasoning model such as qwen3 from thinking first
-QDRANT_COLLECTION=enterprise_rag   # collection name
-GROQ_API_KEY=gsk_...               # cloud generation, required on Render
-GROQ_MODEL=openai/gpt-oss-120b     # change this when Groq retires a model
-REDIS_URL=redis://localhost:6379   # cache and rate limiter
-CACHE_TTL=3600                     # cache lifetime in seconds
-MAX_FILE_SIZE_MB=10                # upload limit
-REDIS_MAX_CONNECTIONS=10           # connection pool size
-```
-
----
-
-## Cost
-
-The deployment runs on free tiers: Groq for generation, Qdrant Cloud for vectors, Redis for the cache, Render for the backend and Vercel for the frontend. Local development uses Ollama.
-
----
-
-## Not done
-
-- Reranking does not run on the deployment, and I have not measured it locally.
-- HyDE and multi-query are implemented but not exposed through the API, and not evaluated.
-- The retrieval eval is 20 questions over a small corpus; it is a regression check, not a benchmark.
-- Conversation memory is in-process and is lost on restart.
-- The tests are manual scripts, and there is no CI test run.
-- CORS is open to every origin.
-- `GET /api/health` makes a real call to the language model to check it, and the handler runs on the event loop, so with a slow or cold local model it can hold up every other request until it returns. The web UI never calls it. I found this while setting up the recording, and have not changed it.
-- `DELETE /api/documents/{name}` removes the chunks but reports `chunks_deleted: 0`; the count is wrong, the deletion is not.
-- The recording used a local Ollama model and a local Qdrant container, not Groq and Qdrant Cloud, so it shows the pipeline working and says nothing about how the hosted setup answered.
-
----
+Python 3.13, FastAPI, LangChain, LangGraph, Qdrant, Redis, fastembed or sentence-transformers (all-MiniLM-L6-v2), rank-bm25, Groq, Ollama, Next.js 16, React 19, TypeScript, Tailwind CSS.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
-
-## Author
-
-**Daniel Alexis Cruz**
-
-- Portfolio: https://dacruz.vercel.app
-- GitHub: https://github.com/Exalt24
-- LinkedIn: https://linkedin.com/in/dacruz24
+MIT, see [LICENSE](LICENSE). By Daniel Alexis Cruz, [dacruz.vercel.app](https://dacruz.vercel.app).
