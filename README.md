@@ -8,8 +8,6 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 **Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed).
 
-[![keep-alive workflow](https://github.com/Exalt24/enterprise-rag-knowledge-base/actions/workflows/keep-alive.yml/badge.svg)](https://github.com/Exalt24/enterprise-rag-knowledge-base/actions/workflows/keep-alive.yml)
-
 The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below, and the recording above is one such run.
 
 ## What it is and why
@@ -38,7 +36,7 @@ Hybrid beat vector by one question out of twenty: a direction, not a settled res
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     UI["Next.js front end"] --> API["FastAPI"]
     API --> R["Retrieval<br/>vector + BM25 hybrid<br/>optional cross-encoder"]
     R --> Q[("Qdrant")]
@@ -67,7 +65,7 @@ cd backend && pytest tests/test_hybrid_ranking.py     # 3 passed, no live servic
 python tests/eval_retrieval.py --base-url http://localhost:8001/api
 ```
 
-The other files in `backend/tests/` are scripts run by hand against a local backend. There is no CI test run, so there is no CI badge.
+The other files in `backend/tests/` are scripts run by hand against a local backend. There is no CI test run.
 
 ## Limits and not done
 
