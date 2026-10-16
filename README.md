@@ -49,6 +49,10 @@ Hybrid retrieval (the default) scores the top 2k vector hits at cosine times 0.7
 
 ## Run it
 
+You need Docker, Python 3.13+, Node 18+ and Ollama with one model pulled. The local path needs no account and no API key; a Groq key is only for the cloud setup in [docs/reference.md](docs/reference.md). `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 embedding model, so allow a few minutes.
+
+The commands use the code's default model, `llama3`. The recording used `qwen3:14b`: to match it, pull that model and set `OLLAMA_MODEL=qwen3:14b`, `OLLAMA_REASONING=false` and `OLLAMA_TIMEOUT=300` before starting the backend (step 2 of the reference). Answers from `llama3` will read differently.
+
 ```bash
 docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant && ollama pull llama3
 cd backend && python -m venv venv && source venv/Scripts/activate && pip install -r requirements.txt
@@ -56,7 +60,7 @@ QDRANT_URL=http://localhost:6333 python -m app.main            # http://localhos
 cd ../frontend && npm install && echo "NEXT_PUBLIC_API_URL=http://localhost:8001/api" > .env.local && npm run dev
 ```
 
-Sample documents are in [`docs/sample-corpus/`](docs/sample-corpus/). Full steps, API examples, environment variables and deployment are in [docs/reference.md](docs/reference.md). The first backend start downloads the embedding model.
+Sample documents are in [`docs/sample-corpus/`](docs/sample-corpus/). Full steps, API examples, environment variables and deployment are in [docs/reference.md](docs/reference.md).
 
 ## Tests
 
