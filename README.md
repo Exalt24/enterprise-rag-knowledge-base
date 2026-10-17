@@ -6,7 +6,7 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 *Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. Three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.*
 
-**Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed). The eval ran over a 26-chunk corpus on the deployment that no longer exists, a different corpus from the 14-chunk one in the recording above; reproduce it with `python backend/tests/eval_retrieval.py` (see Tests).
+**Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed). The eval ran over a 26-chunk corpus on the deployment that no longer exists, a different corpus from the 14-chunk one in the recording above. The harness is `backend/tests/eval_retrieval.py`, but that 26-chunk corpus is not in this repo, so the figure is a record of that run and a stranger cannot rerun it as it stands (see Tests).
 
 The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below, and the recording above is one such run.
 
