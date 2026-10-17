@@ -6,7 +6,7 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 *Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. Three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.*
 
-**Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed). The eval ran over a 26-chunk corpus on the deployment that no longer exists, a different corpus from the 14-chunk one in the recording above. The harness is `backend/tests/eval_retrieval.py`, but that 26-chunk corpus is not in this repo, so the figure is a record of that run and a stranger cannot rerun it as it stands (see Tests).
+**Proof:** hit@1 of 85% vector and 90% hybrid on a 20-question eval (hit@3 is 100% for both), plus a regression test that needs no live service (3 passed). The eval ran over a 26-chunk corpus on the deployment that no longer exists, a different corpus from the 14-chunk one in the recording above. The harness is `backend/tests/eval_retrieval.py`, but that 26-chunk corpus is not in this repo, so the figure is a record of that run and a stranger cannot rerun it as it stands (see Limits).
 
 The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below, and the recording above is one such run.
 
@@ -69,12 +69,12 @@ cd backend && pytest tests/test_hybrid_ranking.py     # 3 passed, no live servic
 python tests/eval_retrieval.py --base-url http://localhost:8001/api
 ```
 
-The other files in `backend/tests/` are scripts run by hand against a local backend. There is no CI test run.
+The eval script needs a running backend with a corpus already ingested. It scores whatever corpus you load; the 26-chunk corpus behind the figures above is not in this repo (see Limits). The other files in `backend/tests/` are scripts run by hand against a local backend. There is no CI test run.
 
 ## Limits and not done
 
 - Cross-encoder reranking works locally only, and I have not measured it. HyDE and multi-query exist as library functions, not API routes, and are not evaluated.
-- The eval is 20 questions on a small corpus: a regression check, not a benchmark. The corpus must be re-ingested to reproduce it.
+- The eval is 20 questions on a small corpus: a regression check, not a benchmark. The 26-chunk corpus is not in this repo, so the figures are a record of that run and cannot be reproduced as they stand.
 - Conversation memory is in-process and lost on restart.
 - CORS allows every origin. `GET /api/health` makes a real model call and can stall other requests on a slow local model.
 - `docker-compose.yml` predates the move to Qdrant and is unmaintained.
