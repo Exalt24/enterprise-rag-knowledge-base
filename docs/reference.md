@@ -224,10 +224,9 @@ enterprise-rag-knowledge-base/
 │   ├── tests/                         # see Testing
 │   ├── requirements.txt               # full local set
 │   ├── requirements-render.txt        # deployed image, no torch
-│   ├── keep_alive.py                  # pings Qdrant and Redis so the free tiers are not reclaimed
+│   ├── keep_alive.py                  # pings Qdrant and Redis so the free tiers are not reclaimed; run it by hand, no workflow does
 │   └── Dockerfile
 ├── frontend/                          # Next.js app
-├── .github/workflows/keep-alive.yml   # runs keep_alive.py every 5 days
 ├── docker-compose.yml
 ├── docs/
 │   ├── demo.gif                       # the README hero
