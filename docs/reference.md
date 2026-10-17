@@ -229,7 +229,12 @@ enterprise-rag-knowledge-base/
 ├── frontend/                          # Next.js app
 ├── .github/workflows/keep-alive.yml   # runs keep_alive.py every 5 days
 ├── docker-compose.yml
-├── SYSTEM-KNOWLEDGE.md                # design notes
+├── docs/
+│   ├── demo.gif                       # the README hero
+│   ├── engineering-notes.md           # the failures behind the README
+│   ├── reference.md                   # this file
+│   ├── sample-corpus/                 # documents for the quick start
+│   └── SYSTEM-KNOWLEDGE.md            # design notes
 └── README.md
 ```
 
