@@ -90,7 +90,7 @@ ormsgpack==1.12.2
 overrides==7.7.0
 packaging==26.2
 pdf2image==1.17.0
-pillow==12.3.0
+pillow==13.0.0
 portalocker==3.2.0
 posthog==7.22.0
 propcache==0.5.2
