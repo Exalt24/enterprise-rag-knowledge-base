@@ -28,7 +28,20 @@ export function FileList({ refreshKey }: { refreshKey: number }) {
   };
 
   useEffect(() => {
-    fetchDocuments();
+    let cancelled = false;
+    api.listDocuments()
+      .then((data) => {
+        if (!cancelled) setDocuments(data.documents);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch documents:", error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const handleDelete = async (fileName: string) => {
