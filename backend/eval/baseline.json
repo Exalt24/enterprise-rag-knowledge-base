@@ -1,0 +1,94 @@
+{
+  "chunk_count": 27,
+  "chunk_hash": "841a92cad58e94c9cf00c2ebe3723ff199d112fb1e0575f40d145693383a7f47",
+  "tolerance": 0.02,
+  "numbers": {
+    "vector": {
+      "direct": {
+        "hit@1": 0.8333,
+        "hit@3": 1.0,
+        "mrr": 0.9167,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "kept": 1.0
+      },
+      "paraphrase": {
+        "hit@1": 0.5,
+        "hit@3": 0.6667,
+        "mrr": 0.5903,
+        "recall@3": 0.6667,
+        "recall@5": 0.75,
+        "kept": 0.25
+      },
+      "multi-document": {
+        "hit@1": 0.875,
+        "hit@3": 1.0,
+        "mrr": 0.9167,
+        "recall@3": 0.875,
+        "recall@5": 1.0,
+        "kept": 0.875
+      },
+      "unanswerable": {
+        "abstain": 0.7
+      }
+    },
+    "bm25": {
+      "direct": {
+        "hit@1": 0.75,
+        "hit@3": 1.0,
+        "mrr": 0.875,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "kept": 1.0
+      },
+      "paraphrase": {
+        "hit@1": 0.4167,
+        "hit@3": 0.75,
+        "mrr": 0.5417,
+        "recall@3": 0.75,
+        "recall@5": 0.75,
+        "kept": 1.0
+      },
+      "multi-document": {
+        "hit@1": 0.875,
+        "hit@3": 1.0,
+        "mrr": 0.9167,
+        "recall@3": 0.75,
+        "recall@5": 0.8125,
+        "kept": 1.0
+      },
+      "unanswerable": {
+        "abstain": 0.3
+      }
+    },
+    "hybrid": {
+      "direct": {
+        "hit@1": 0.8333,
+        "hit@3": 1.0,
+        "mrr": 0.9167,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "kept": 1.0
+      },
+      "paraphrase": {
+        "hit@1": 0.5,
+        "hit@3": 0.75,
+        "mrr": 0.5833,
+        "recall@3": 0.75,
+        "recall@5": 0.75,
+        "kept": 0.25
+      },
+      "multi-document": {
+        "hit@1": 0.875,
+        "hit@3": 1.0,
+        "mrr": 0.9167,
+        "recall@3": 0.875,
+        "recall@5": 0.9375,
+        "kept": 1.0
+      },
+      "unanswerable": {
+        "abstain": 0.7
+      }
+    }
+  }
+}

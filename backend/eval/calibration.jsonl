@@ -1,0 +1,16 @@
+{"id": "c01", "category": "answerable", "question": "How long do closed risks stay visible?", "expected_document": "risk-register-procedure.md", "must_contain": "stay visible in the register for 6 months"}
+{"id": "c02", "category": "answerable", "question": "By when is the impact assessment of a change request completed?", "expected_document": "change-control-procedure.md", "must_contain": "The impact assessment is completed within 5 working days of submission"}
+{"id": "c03", "category": "answerable", "question": "On which day does the Change Board meet?", "expected_document": "change-control-procedure.md", "must_contain": "meets every second Tuesday"}
+{"id": "c04", "category": "answerable", "question": "In what units are the cost report figures given?", "expected_document": "monthly-cost-report-guide.md", "must_contain": "Figures are reported in thousands of dollars"}
+{"id": "c05", "category": "answerable", "question": "Who reviewed the Cedar lessons note?", "expected_document": "lessons-learned-note.md", "must_contain": "reviewed by the Programme Risk Lead"}
+{"id": "c06", "category": "answerable", "question": "Who signs the forecast each month?", "expected_document": "monthly-cost-report-guide.md", "must_contain": "the Project Manager signs it"}
+{"id": "c07", "category": "answerable", "question": "What becomes of a rejected change request?", "expected_document": "change-control-procedure.md", "must_contain": "A rejected CR stays in the change log for the life of the programme"}
+{"id": "c08", "category": "answerable", "question": "Which score range counts as a medium risk?", "expected_document": "risk-register-procedure.md", "must_contain": "5 to 9 is medium"}
+{"id": "c09", "category": "unanswerable", "question": "Which airline offers the cheapest flights to Cebu?", "expected_document": "", "must_contain": ""}
+{"id": "c10", "category": "unanswerable", "question": "What is the weather like in January?", "expected_document": "", "must_contain": ""}
+{"id": "c11", "category": "unanswerable", "question": "How do I reset my email password?", "expected_document": "", "must_contain": ""}
+{"id": "c12", "category": "unanswerable", "question": "What is the staff holiday allowance?", "expected_document": "", "must_contain": ""}
+{"id": "c13", "category": "unanswerable", "question": "Who won the football match last night?", "expected_document": "", "must_contain": ""}
+{"id": "c14", "category": "unanswerable", "question": "What are the vendor payment terms in days?", "expected_document": "", "must_contain": ""}
+{"id": "c15", "category": "unanswerable", "question": "How many floors does the refurbished building have?", "expected_document": "", "must_contain": ""}
+{"id": "c16", "category": "unanswerable", "question": "What are the opening hours of the site canteen?", "expected_document": "", "must_contain": ""}
