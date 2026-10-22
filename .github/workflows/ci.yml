@@ -67,14 +67,16 @@ jobs:
           tests/test_eval_baseline_changes.py
           tests/test_eval_readme_claims.py
           tests/test_eval_mutation_targets.py
-      # The MCP server: in-process tool tests, the generated tool x failure table, and the real process over stdio.
-      # None of them needs Qdrant, a model download or a language model key. Its own invocation, like the others.
-      - name: MCP server tests
+      # The MCP server: in-process tool tests, the generated tool x failure table, and the real process over stdio;
+      # then the skill's written scenarios replayed against the server. None of them needs Qdrant, a model download or
+      # a language model key. Its own invocation, like the others.
+      - name: MCP server and skill tests
         run: >
           python -m pytest
           tests/test_mcp_server.py
           tests/test_mcp_server_classes.py
           tests/test_mcp_server_stdio.py
+          tests/test_skill_scenarios.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       - name: Mutation check
