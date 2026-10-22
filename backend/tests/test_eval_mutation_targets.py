@@ -1,7 +1,7 @@
 """The mutation check finds its targets in the real source.
 
 eval/mutation_check.py breaks the guarded code in a temporary copy and demands a test failure. Running it takes about
-half a minute, so this test only proves the cheap half on every run: each mutation still finds exactly one place in the
+a minute or more, so this test only proves the cheap half on every run: each mutation still finds exactly one place in the
 current source and produces valid Python. If someone renames hybrid_search or moves the counter, this fails and says
 which mutant is stale, instead of the check quietly guarding nothing.
 Run: pytest tests/test_eval_mutation_targets.py
@@ -27,7 +27,10 @@ def test_each_mutant_finds_one_target_and_yields_valid_python(mutant):
     compile(source, mutant.file, "exec")
 
 
-def test_the_five_guarded_areas_each_have_a_mutant():
+def test_every_guarded_area_has_a_mutant():
     names = " ".join(m.name for m in MUTANTS)
-    for area in ("bm25-branch", "bonus", "threshold", "must-contain", "fallback-counter"):
+    areas = ("bm25-branch", "bonus", "threshold", "must-contain", "fallback-counter", "fallback-cause", "baseline-rise",
+             "baseline-question-hash", "baseline-fallen-back", "readme-table", "bootstrap-upper", "bootstrap-lower",
+             "eval-chunking", "label-validation")
+    for area in areas:
         assert area in names, f"no mutant covers {area}"

@@ -52,9 +52,13 @@ jobs:
         run: >
           python -m pytest
           tests/test_eval_fallback_counter.py
+          tests/test_eval_fallback_cause.py
+          tests/test_eval_labels.py
           tests/test_eval_questions.py
           tests/test_eval_harness.py
           tests/test_eval_baseline.py
+          tests/test_eval_baseline_changes.py
+          tests/test_eval_readme_claims.py
           tests/test_eval_mutation_targets.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check

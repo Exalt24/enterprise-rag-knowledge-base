@@ -28,10 +28,19 @@ BACKEND = Path(__file__).resolve().parents[1]
 ADVANCED = "app/services/advanced_retrieval.py"
 HARNESS = "eval/harness.py"
 
-# Cheapest first would be test_hybrid_ranking, but the eval tests run first so the report shows which of the NEW tests
-# catch each mutant; the stubbed ranking test only gets a turn when they all stayed green.
+# Cheapest first would be test_hybrid_ranking, but the eval tests run first (the generated class tests before the older
+# ones) so the report shows which of the NEW tests catch each mutant; the stubbed ranking test only gets a turn when they all stayed green.
 INVOCATIONS = [
-    ["tests/test_eval_fallback_counter.py", "tests/test_eval_harness.py", "tests/test_eval_baseline.py", "tests/test_eval_questions.py"],
+    [
+        "tests/test_eval_baseline_changes.py",
+        "tests/test_eval_fallback_cause.py",
+        "tests/test_eval_readme_claims.py",
+        "tests/test_eval_labels.py",
+        "tests/test_eval_fallback_counter.py",
+        "tests/test_eval_harness.py",
+        "tests/test_eval_baseline.py",
+        "tests/test_eval_questions.py",
+    ],
     ["tests/test_hybrid_ranking.py"],
 ]
 
@@ -142,10 +151,103 @@ def baseline_tolerance_ignored(tree):
     """A pinned number can fall by any amount without the check noticing."""
     fn = _function(tree, "compare_to_baseline")
     cmp_ = _only(
-        [n for n in ast.walk(fn) if isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id == "now" and isinstance(n.ops[0], ast.Lt)],
-        "now < pinned - tolerance",
+        [n for n in ast.walk(fn) if isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id == "fall" and isinstance(n.ops[0], ast.Gt)],
+        "fall > tolerance",
     )
-    cmp_.comparators = [ast.UnaryOp(op=ast.USub(), operand=ast.Constant(1))]
+    cmp_.comparators = [ast.Constant(1000)]
+
+
+def baseline_rise_flagged(tree):
+    """A number that ROSE is judged like a fall (the size of the change is taken without its sign), so an improvement fails."""
+    fn = _function(tree, "compare_to_baseline")
+    assign = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "fall" for t in n.targets)],
+        "assignment of fall",
+    )
+    assign.value = ast.Call(func=ast.Name(id="abs", ctx=ast.Load()), args=[assign.value], keywords=[])
+
+
+def baseline_question_hash_not_compared(tree):
+    """An edit to questions.jsonl or calibration.jsonl is no longer noticed, so a label fix reads as a retrieval change."""
+    fn = _function(tree, "compare_to_baseline")
+    cond = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.If) and any(isinstance(s, ast.Name) and s.id == "key" for s in ast.walk(n.test))],
+        "question hash comparison",
+    )
+    cond.test = ast.Constant(False)
+
+
+def baseline_fallen_back_method_still_judged(tree):
+    """A method that fell back to vector-only is judged against the baseline anyway, so one fault prints several lines."""
+    fn = _function(tree, "compare_to_baseline")
+    cond = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.If) and isinstance(n.test, ast.Compare) and isinstance(n.test.ops[0], ast.In)
+         and isinstance(n.test.comparators[0], ast.Name) and n.test.comparators[0].id == "fell_back"],
+        "method in fell_back",
+    )
+    cond.test = ast.Constant(False)
+
+
+def fallback_cause_never_kept(tree):
+    """The fallback branch counts the failure and drops its cause, so the CI log has a count and no reason."""
+    fn = _function(tree, "hybrid_search")
+    handler = _only([n for n in ast.walk(fn) if isinstance(n, ast.ExceptHandler)], "except handler of hybrid_search")
+    cond = _only(
+        [n for n in handler.body if isinstance(n, ast.If) and "hybrid_fallback_cause" in ast.dump(n.test)],
+        "cause assignment guard",
+    )
+    handler.body[handler.body.index(cond)] = ast.Pass()
+
+
+def fallback_cause_overwritten_by_later_faults(tree):
+    """The cause keeps the LAST exception instead of the first, so a later, different fault hides the one that started it."""
+    fn = _function(tree, "hybrid_search")
+    handler = _only([n for n in ast.walk(fn) if isinstance(n, ast.ExceptHandler)], "except handler of hybrid_search")
+    cond = _only(
+        [n for n in handler.body if isinstance(n, ast.If) and "hybrid_fallback_cause" in ast.dump(n.test)],
+        "cause assignment guard",
+    )
+    handler.body[handler.body.index(cond) : handler.body.index(cond) + 1] = cond.body
+
+
+def readme_table_drops_recall(tree):
+    """The generated README table loses its recall columns, so a multi-document hit looks like everything was found."""
+    assign = _only(
+        [n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "TABLE_METRICS" for t in n.targets)],
+        "TABLE_METRICS",
+    )
+    assign.value.elts = [e for e in assign.value.elts if not (isinstance(e.elts[0], ast.Constant) and str(e.elts[0].value).startswith("recall"))]
+
+
+def bootstrap_upper_percentile_moved(tree):
+    """The upper bound of the 95% interval is read from the 95th percentile instead of the 97.5th."""
+    fn = _function(tree, "percentile_bounds")
+    const = _only([n for n in ast.walk(fn) if isinstance(n, ast.Constant) and n.value == 0.975], "the 0.975 index")
+    const.value = 0.95
+
+
+def bootstrap_lower_percentile_moved(tree):
+    """The lower bound of the 95% interval is read from the 5th percentile instead of the 2.5th."""
+    fn = _function(tree, "percentile_bounds")
+    const = _only([n for n in ast.walk(fn) if isinstance(n, ast.Constant) and n.value == 0.025], "the 0.025 index")
+    const.value = 0.05
+
+
+def eval_chunking_follows_the_environment(tree):
+    """The eval takes its chunk size and overlap from the app settings again, so CHUNK_SIZE in the environment moves it."""
+    fn = _function(tree, "chunk_corpus")
+    call = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "chunk_documents"],
+        "TextChunker.chunk_documents call",
+    )
+    call.keywords = []
+
+
+def label_validation_skipped(tree):
+    """Labels are no longer checked when the questions load, so a wrong one dies later inside the metrics."""
+    fn = _function(tree, "load_questions")
+    cond = _only([n for n in ast.walk(fn) if isinstance(n, ast.If) and isinstance(n.test, ast.Name) and n.test.id == "validate"], "if validate")
+    cond.test = ast.Constant(False)
 
 
 def baseline_chunk_hash_not_compared(tree):
@@ -190,6 +292,16 @@ MUTANTS: List[Mutant] = [
     Mutant("must-contain-empty-phrase-matches", HARNESS, must_contain_empty_phrase_matches),
     Mutant("baseline-tolerance-ignored", HARNESS, baseline_tolerance_ignored),
     Mutant("baseline-chunk-hash-not-compared", HARNESS, baseline_chunk_hash_not_compared),
+    Mutant("baseline-rise-flagged-as-a-fall", HARNESS, baseline_rise_flagged),
+    Mutant("baseline-question-hash-not-compared", HARNESS, baseline_question_hash_not_compared),
+    Mutant("baseline-fallen-back-method-still-judged", HARNESS, baseline_fallen_back_method_still_judged),
+    Mutant("fallback-cause-never-kept", ADVANCED, fallback_cause_never_kept),
+    Mutant("fallback-cause-overwritten-by-later-faults", ADVANCED, fallback_cause_overwritten_by_later_faults),
+    Mutant("readme-table-drops-recall", HARNESS, readme_table_drops_recall),
+    Mutant("bootstrap-upper-percentile-moved", HARNESS, bootstrap_upper_percentile_moved),
+    Mutant("bootstrap-lower-percentile-moved", HARNESS, bootstrap_lower_percentile_moved),
+    Mutant("eval-chunking-follows-the-environment", HARNESS, eval_chunking_follows_the_environment),
+    Mutant("label-validation-skipped", HARNESS, label_validation_skipped),
 ]
 
 
@@ -214,6 +326,10 @@ def _copy_tree(destination: Path) -> Path:
     for part in ("app", "eval", "tests"):
         shutil.copytree(BACKEND / part, target / part, ignore=ignore)
     shutil.copy(BACKEND / "pytest.ini", target / "pytest.ini")
+    # the README tests read the README and docs/evaluation.md beside backend/
+    (destination / "docs").mkdir(exist_ok=True)
+    shutil.copy(BACKEND.parent / "README.md", destination / "README.md")
+    shutil.copy(BACKEND.parent / "docs" / "evaluation.md", destination / "docs" / "evaluation.md")
     return target
 
 

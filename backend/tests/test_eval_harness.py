@@ -33,18 +33,21 @@ from eval.harness import (  # noqa: E402
     chance_hit,
     chance_mrr,
     chunk_corpus,
+    chunk_fingerprint,
     in_memory_store,
     load_corpus,
     load_questions,
+    percentile_bounds,
     question_metrics,
     run_evaluation,
 )
+from app.core.config import settings  # noqa: E402
 from app.services.vector_store import vector_store  # noqa: E402
 
 EMB = HashingEmbeddings()
 CHUNKS = chunk_corpus(load_corpus())
-QUESTIONS = load_questions(QUESTIONS_PATH)
-CALIBRATION = load_questions(CALIBRATION_PATH)
+QUESTIONS = load_questions(QUESTIONS_PATH, validate=False)  # loading must not hide the label tests; validation has its own tests
+CALIBRATION = load_questions(CALIBRATION_PATH, validate=False)  # loading must not hide the label tests; validation has its own tests
 
 
 # ---------------------------------------------------------------- embedder
@@ -251,6 +254,35 @@ def test_bootstrap_is_seeded_contains_the_mean_and_is_degenerate_when_all_equal(
     assert bootstrap_interval([1.0] * 6, random.Random(1)) == (1.0, 1.0)
 
 
+@pytest.mark.parametrize("resamples", (400, 1000, 2000, 4000))
+def test_the_bootstrap_bounds_leave_a_fortieth_of_the_resamples_outside_each_end(resamples):
+    # 95% interval: with strictly increasing means exactly 2.5% lie below the lower bound and 2.5% above the upper one,
+    # so a bound taken from the wrong index (0.95 instead of 0.975, or one place off) is caught on either end.
+    means = [i / resamples for i in range(resamples)]
+    lo, hi = percentile_bounds(means)
+    assert sum(1 for m in means if m < lo) == resamples // 40
+    assert sum(1 for m in means if m > hi) == resamples // 40
+
+
+def test_the_bootstrap_interval_of_a_fixed_fixture_has_these_two_bounds():
+    # values and seed fixed: the 51st smallest and the 1950th smallest of 2000 resampled means
+    lo, hi = bootstrap_interval([1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0], random.Random(1), resamples=2000)
+    assert (lo, hi) == (0.25, 1.0)
+    assert bootstrap_interval([0.0, 0.0, 0.0], random.Random(1)) == (0.0, 0.0)
+
+
+# ---------------------------------------------------------------- the eval's chunking does not follow the environment
+
+
+@pytest.mark.parametrize("size,overlap", [(1000, 50), (200, 20), (500, 200), (2000, 400)])
+def test_the_eval_chunking_ignores_the_chunk_settings_of_the_environment(monkeypatch, size, overlap):
+    before = chunk_fingerprint(chunk_corpus(load_corpus()))
+    monkeypatch.setattr(settings, "chunk_size", size)
+    monkeypatch.setattr(settings, "chunk_overlap", overlap)
+    assert chunk_fingerprint(chunk_corpus(load_corpus())) == before
+    assert (harness.EVAL_CHUNK_SIZE, harness.EVAL_CHUNK_OVERLAP) == (500, 50)
+
+
 # ---------------------------------------------------------------- threshold
 
 
@@ -315,3 +347,4 @@ def test_the_text_report_prints_the_caveats_the_readme_repeats(report):
     text = harness.format_report(report, "TITLE")
     assert "chance baseline" in text and "calibrated on" in text and "hybrid fallbacks" in text
     assert "intervals are wide" in text
+    assert "ceiling" in text and "no spread" in text

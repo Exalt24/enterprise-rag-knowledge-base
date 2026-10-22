@@ -45,6 +45,9 @@ class AdvancedRetrieval:
     # by design (a user still gets results), so without this a broken BM25 branch looks exactly
     # like a working hybrid search. The evaluation fails when this is above zero.
     hybrid_fallback_count = 0
+    # The exception behind the FIRST fallback ("RuntimeError: message"), kept because the count alone says that hybrid
+    # broke and never why. The first one is kept on purpose: later failures are usually the same fault repeated.
+    hybrid_fallback_cause = None
 
     def __init__(self):
         self.vector_store = vector_store
@@ -194,6 +197,8 @@ class AdvancedRetrieval:
 
         except Exception as e:
             self.hybrid_fallback_count += 1
+            if self.hybrid_fallback_cause is None:
+                self.hybrid_fallback_cause = f"{type(e).__name__}: {e}"
             print(f"[!] Hybrid search failed, using vector only: {e}")
             # Fallback to basic vector search
             if with_scores:
