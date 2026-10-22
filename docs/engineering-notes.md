@@ -46,6 +46,8 @@ Two defects turned up while proving that fix. A failed generation was cached for
 <a id="retrieval-accuracy"></a>
 ### Retrieval accuracy
 
+A rerunnable evaluation over a committed synthetic corpus replaced this one on 2026-10-23; its tables and limits are in the [README](../README.md#measured-results) and its method in [evaluation.md](evaluation.md). The section below is the record of the earlier run, kept apart because it measured a different corpus.
+
 Measured on 2026-08-03 against the live deployment with `backend/tests/eval_retrieval.py`: 20 questions over a 26-chunk corpus, scored hit@k on whether the chunk containing the answer was retrieved at all.
 
 | hit@k | vector only | hybrid |
