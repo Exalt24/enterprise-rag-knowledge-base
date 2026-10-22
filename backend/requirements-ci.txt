@@ -1,0 +1,9 @@
+# What the CI job installs: the Render set (no torch, no CUDA wheels, no Windows-only freeze
+# leftovers) plus the test runner. requirements.txt is a Windows pip freeze that pulls the
+# CUDA torch wheel on Linux, which does not belong in a 15 minute job.
+#
+# The job sets RENDER=true so advanced_retrieval skips the sentence-transformers and Ollama
+# imports, and the eval runs on a hashing embedder, so no model is ever downloaded in CI.
+-r requirements-render.txt
+
+pytest==9.1.1
