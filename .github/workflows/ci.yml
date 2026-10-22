@@ -16,6 +16,10 @@ jobs:
   python-backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # advanced_retrieval imports sentence-transformers (torch) unless RENDER is set; CI installs no torch and
+      # the evaluation never reranks, so it runs the same way the slim Render image does.
+      RENDER: "true"
     defaults:
       run:
         working-directory: "backend"
@@ -25,11 +29,37 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: |
+            backend/requirements-ci.txt
+            backend/requirements-render.txt
+      # requirements-ci.txt is the Render set plus pytest: no torch and no CUDA wheels, so the install stays far
+      # inside the 15 minute timeout. requirements.txt is a Windows pip freeze that pulls the CUDA torch wheel.
       - name: Install
-        run: pip install -r requirements.txt
-      - name: Install pytest
-        run: pip install pytest
-      # DROPPED, failed locally when this file was made: python -m pytest -q
+        run: |
+          start=$(date +%s)
+          pip install -r requirements-ci.txt
+          echo "pip install took $(( $(date +%s) - start )) seconds" | tee -a "$GITHUB_STEP_SUMMARY"
+      # Pinned test files only. The other files in tests/ need a running backend on :8001 or Qdrant and an LLM,
+      # and backend/test_setup.py is a script that starts services at import and calls exit(1); a bare
+      # `pytest` collects all of them and errors, which is why this step used to be dropped. pytest.ini
+      # ignores them too, so a local `pytest` in backend/ behaves the same.
+      #
+      # Two invocations on purpose: test_hybrid_ranking.py replaces modules that fail to import with stubs for
+      # the whole process, and the evaluation must run against the real ones.
+      - name: Ranking test (stubbed modules)
+        run: python -m pytest tests/test_hybrid_ranking.py
+      - name: Evaluation tests
+        run: >
+          python -m pytest
+          tests/test_eval_fallback_counter.py
+          tests/test_eval_questions.py
+          tests/test_eval_harness.py
+          tests/test_eval_baseline.py
+          tests/test_eval_mutation_targets.py
+      - name: Deterministic evaluation check
+        run: python eval/run_eval.py --check
+      - name: Mutation check
+        run: python eval/mutation_check.py
   node-frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
