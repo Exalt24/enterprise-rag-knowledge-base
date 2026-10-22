@@ -212,7 +212,7 @@ export function ChatInterface() {
             <p className="text-lg mb-2">No messages yet</p>
             <p className="text-sm">Ask a question and try follow-ups!</p>
             <p className="text-xs text-slate-600 mt-4">
-              Example: "What skills?" then "What about AI?"
+              Example: &quot;What skills?&quot; then &quot;What about AI?&quot;
             </p>
           </div>
         )}
