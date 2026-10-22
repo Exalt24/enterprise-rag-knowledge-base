@@ -10,9 +10,13 @@ of the check. A mutant whose target cannot be found also fails the check: it mea
     python eval/mutation_check.py                 run every mutant
     python eval/mutation_check.py --list          list them
     python eval/mutation_check.py --only bm25-branch-removed
+    python eval/mutation_check.py --skip-mcp      leave out the MCP server mutants (they need requirements-mcp.txt)
+
+The MCP server mutants break mcp_server/server.py and run only the server tests; each must fail a named test.
 """
 import argparse
 import ast
+import importlib.util
 import os
 import re
 import shutil
@@ -43,6 +47,9 @@ INVOCATIONS = [
     ],
     ["tests/test_hybrid_ranking.py"],
 ]
+# The MCP server mutants run only the server tests (they need the SDK: pip install -r requirements-mcp.txt).
+MCP_SERVER = "mcp_server/server.py"
+MCP_RUNS = (("tests/test_mcp_server.py", "tests/test_mcp_server_classes.py", "tests/test_mcp_server_stdio.py"),)
 
 
 class TargetNotFound(Exception):
@@ -260,6 +267,108 @@ def baseline_chunk_hash_not_compared(tree):
     cond.test = ast.Constant(False)
 
 
+# ---------------------------------------------------------------- the MCP server mutants (target mcp_server/server.py)
+
+
+def _splice(tree: ast.AST, old: ast.AST, new_nodes: list) -> None:
+    """Replace one statement by several (or none) in whichever body list holds it."""
+    for parent in ast.walk(tree):
+        for field, value in ast.iter_fields(parent):
+            if isinstance(value, list) and any(item is old for item in value):
+                i = next(i for i, item in enumerate(value) if item is old)
+                value[i : i + 1] = new_nodes
+                return
+    raise TargetNotFound("could not splice the statement")
+
+
+def _redirect_withs(root: ast.AST) -> list:
+    """Every `with contextlib.redirect_stdout(...)` statement under root."""
+    found = []
+    for n in ast.walk(root):
+        if isinstance(n, ast.With) and any(
+            isinstance(item.context_expr, ast.Call) and getattr(item.context_expr.func, "attr", "") == "redirect_stdout" for item in n.items
+        ):
+            found.append(n)
+    return found
+
+
+def mcp_import_time_stdout_redirect_removed(tree):
+    """The services are imported with stdout still pointing at the protocol channel, so their print calls corrupt it."""
+    top = _only([n for n in tree.body if isinstance(n, ast.With) and n in _redirect_withs(tree)], "module level redirect around the service imports")
+    _splice(tree, top, top.body)
+
+
+def mcp_tool_call_stdout_redirect_removed(tree):
+    """Tool calls run with stdout pointing at the protocol channel, so the services' progress lines go to it."""
+    fn = _function(tree, "_stdout_to_stderr")
+    inner = _only(_redirect_withs(fn), "redirect inside the tool wrapper")
+    _splice(tree, inner, inner.body)
+
+
+def mcp_citation_id_built_from_the_wrong_field(tree):
+    """The chunk number in a citation id comes from total_chunks, so an id names a chunk that is not the one retrieved."""
+    fn = _function(tree, "_chunk_id")
+    const = _only([n for n in ast.walk(fn) if isinstance(n, ast.Constant) and n.value == "chunk_index"], "the chunk_index lookup")
+    const.value = "total_chunks"
+
+
+def mcp_failed_generation_returned_as_an_answer(tree):
+    """A generation that failed (model_used "none") is returned as a normal answer, error text and all."""
+    fn = _function(tree, "ask_question")
+    cond = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.If) and isinstance(n.test, ast.Compare) and any(isinstance(c, ast.Constant) and c.value == "none" for c in n.test.comparators)],
+        'the model_used == "none" check',
+    )
+    _splice(tree, cond, [])
+
+
+def mcp_write_tool_registered(tree):
+    """A tool that deletes a document is registered next to the read-only ones."""
+    extra = ast.parse(
+        "@mcp.tool()\n"
+        "def delete_document(file_name: str) -> dict:\n"
+        "    return file_management.delete_document(file_name)\n"
+    ).body[0]
+    main = _function(tree, "main")
+    _splice(tree, main, [extra, main])
+
+
+def mcp_read_only_hint_dropped(tree):
+    """search_documents is annotated as not read-only, so a client would ask for confirmation or refuse it."""
+    annotations = sorted(
+        (n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "ToolAnnotations"), key=lambda n: n.lineno
+    )
+    if not annotations:
+        raise TargetNotFound("no ToolAnnotations call")
+    for k in annotations[0].keywords:
+        if k.arg == "read_only_hint":
+            k.value = ast.Constant(False)
+
+
+def mcp_limit_bound_removed(tree):
+    """A limit of 0 or 1000 is no longer refused."""
+    fn = _function(tree, "search_documents")
+    cond = _only([n for n in ast.walk(fn) if isinstance(n, ast.If) and "MAX_LIMIT" in ast.dump(n.test)], "limit bound check")
+    _splice(tree, cond, [])
+
+
+def mcp_query_length_cap_removed(tree):
+    """A query of any length is accepted."""
+    fn = _function(tree, "_text_argument")
+    cond = _only([n for n in ast.walk(fn) if isinstance(n, ast.If) and "MAX_QUERY_CHARS" in ast.dump(n.test)], "length check")
+    _splice(tree, cond, [])
+
+
+def mcp_document_filter_ignored(tree):
+    """The document argument is accepted and then not applied, so hits come from every document."""
+    fn = _function(tree, "search_documents")
+    comp = _only(
+        [n for n in ast.walk(fn) if isinstance(n, ast.ListComp) and n.generators[0].ifs and "document" in ast.dump(n.generators[0].ifs[0])],
+        "filtering comprehension",
+    )
+    comp.generators[0].ifs = [ast.Constant(True)]
+
+
 def _replace(tree: ast.AST, old: ast.AST, new: ast.AST) -> None:
     for parent in ast.walk(tree):
         for field, value in ast.iter_fields(parent):
@@ -279,6 +388,11 @@ class Mutant:
     name: str
     file: str
     apply: Callable[[ast.AST], None]
+    invocations: Optional[tuple] = None  # pytest invocations to run; None means the evaluation's INVOCATIONS
+
+    @property
+    def runs(self) -> List[List[str]]:
+        return [list(i) for i in self.invocations] if self.invocations else INVOCATIONS
 
 
 MUTANTS: List[Mutant] = [
@@ -302,6 +416,15 @@ MUTANTS: List[Mutant] = [
     Mutant("bootstrap-lower-percentile-moved", HARNESS, bootstrap_lower_percentile_moved),
     Mutant("eval-chunking-follows-the-environment", HARNESS, eval_chunking_follows_the_environment),
     Mutant("label-validation-skipped", HARNESS, label_validation_skipped),
+    Mutant("mcp-stdout-redirect-removed-at-import", MCP_SERVER, mcp_import_time_stdout_redirect_removed, MCP_RUNS),
+    Mutant("mcp-stdout-redirect-removed-in-tool-calls", MCP_SERVER, mcp_tool_call_stdout_redirect_removed, MCP_RUNS),
+    Mutant("mcp-citation-id-from-the-wrong-field", MCP_SERVER, mcp_citation_id_built_from_the_wrong_field, MCP_RUNS),
+    Mutant("mcp-failed-generation-returned-as-an-answer", MCP_SERVER, mcp_failed_generation_returned_as_an_answer, MCP_RUNS),
+    Mutant("mcp-write-tool-registered", MCP_SERVER, mcp_write_tool_registered, MCP_RUNS),
+    Mutant("mcp-read-only-hint-dropped", MCP_SERVER, mcp_read_only_hint_dropped, MCP_RUNS),
+    Mutant("mcp-limit-bound-removed", MCP_SERVER, mcp_limit_bound_removed, MCP_RUNS),
+    Mutant("mcp-query-length-cap-removed", MCP_SERVER, mcp_query_length_cap_removed, MCP_RUNS),
+    Mutant("mcp-document-filter-ignored", MCP_SERVER, mcp_document_filter_ignored, MCP_RUNS),
 ]
 
 
@@ -323,9 +446,10 @@ def mutated_source(mutant: Mutant, root: Path = BACKEND) -> str:
 def _copy_tree(destination: Path) -> Path:
     target = destination / "backend"
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "venv", "data")
-    for part in ("app", "eval", "tests"):
+    for part in ("app", "eval", "tests", "mcp_server"):
         shutil.copytree(BACKEND / part, target / part, ignore=ignore)
     shutil.copy(BACKEND / "pytest.ini", target / "pytest.ini")
+    shutil.copy(BACKEND / "requirements-mcp.txt", target / "requirements-mcp.txt")  # a test checks the SDK pin against it
     # the README tests read the README and docs/evaluation.md beside backend/
     (destination / "docs").mkdir(exist_ok=True)
     shutil.copy(BACKEND.parent / "README.md", destination / "README.md")
@@ -343,11 +467,14 @@ def _failed_tests(output: str) -> List[str]:
     return re.findall(r"^FAILED (\S+)", output, flags=re.M)
 
 
-def run_control() -> Optional[str]:
-    """The unmutated copy must be green, otherwise 'caught' would mean nothing. Returns an error text or None."""
+def run_control(chosen: Optional[List[Mutant]] = None) -> Optional[str]:
+    """The unmutated copy must be green, otherwise 'caught' would mean nothing. Returns an error text or None.
+    Only the invocations the chosen mutants will use are run, so the MCP tests are a control only when an MCP mutant is."""
+    runs = [targets for m in (chosen or MUTANTS) for targets in m.runs]
+    unique = [targets for i, targets in enumerate(runs) if targets not in runs[:i]]
     with tempfile.TemporaryDirectory() as tmp:
         cwd = _copy_tree(Path(tmp))
-        for targets in INVOCATIONS:
+        for targets in unique:
             done = _run_pytest(cwd, targets)
             if done.returncode != 0:
                 return f"control run is not green for {targets}:\n{done.stdout[-1500:]}\n{done.stderr[-500:]}"
@@ -363,7 +490,7 @@ def run_mutant(mutant: Mutant) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         cwd = _copy_tree(Path(tmp))
         (cwd / mutant.file).write_text(source, encoding="utf-8")
-        for targets in INVOCATIONS:
+        for targets in mutant.runs:
             done = _run_pytest(cwd, targets)
             if done.returncode == 1:
                 failed = _failed_tests(done.stdout)
@@ -377,9 +504,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--only", metavar="NAME")
+    parser.add_argument("--skip-mcp", action="store_true", help="leave out the MCP server mutants (they need the SDK)")
     args = parser.parse_args(argv)
 
     chosen = [m for m in MUTANTS if not args.only or m.name == args.only]
+    if args.skip_mcp:
+        chosen = [m for m in chosen if m.file != MCP_SERVER]
     if args.list:
         for m in MUTANTS:
             print(f"{m.name:<44} {m.file}  {m.apply.__doc__.strip()}")
@@ -387,8 +517,11 @@ def main(argv=None) -> int:
     if not chosen:
         print(f"no mutant named {args.only}")
         return 2
+    if any(m.file == MCP_SERVER for m in chosen) and importlib.util.find_spec("mcp") is None:
+        print("The MCP server mutants need the SDK: pip install -r requirements-mcp.txt (or pass --skip-mcp to leave them out).")
+        return 2
 
-    problem = run_control()
+    problem = run_control(chosen)
     if problem:
         print(problem)
         return 2

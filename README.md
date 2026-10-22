@@ -8,7 +8,7 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 *Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. Three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.*
 
-**Proof:** a retrieval evaluation anyone can rerun in one command (4 invented documents, 42 labelled questions, a pinned baseline, results below), and CI that runs the tests plus a mutation check. The older 85% and 90% figures are kept apart, further down, as a record of a corpus that is no longer in this repo.
+**Proof:** a retrieval evaluation anyone can rerun in one command (4 invented documents, 42 labelled questions, a pinned baseline, results below), a [read-only MCP server](#mcp-server-read-only-local) that lets a Claude Code or other MCP client search the knowledge base and get cited answers, and CI that runs the tests plus a mutation check. The older 85% and 90% figures are kept apart, further down, as a record of a corpus that is no longer in this repo.
 
 The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below.
 
@@ -42,6 +42,7 @@ python eval/run_eval.py --check             # same run, then fail on a fallback,
 python eval/run_eval.py --embedder real     # table 2: the repo's own embedding model, run locally
 python eval/run_eval.py --markdown t.md     # the results table below, written from the run (no number typed by hand)
 python eval/mutation_check.py               # break the guarded code one way at a time, require a failing test each time
+                                            # (also needs requirements-mcp.txt for the server mutants; --skip-mcp leaves them out)
 ```
 
 **Table 1, HARNESS CHECK (hashing embedder).** This embedder hashes words into a vector and has no idea what any of them mean, so the table shows that the harness and the ranking code run and are pinned. No quality claim and no "hybrid beats vector" claim comes from it. `eval/baseline.json` pins its chunk count, a hash of the chunk texts, a hash of each question file and these numbers.
@@ -94,6 +95,29 @@ What it says: every method beats the chance rows by a wide margin. Hybrid did no
 
 Hybrid beat vector by one question of twenty: a direction, not a result. A cached repeat of a query took 0.28 seconds against 2.7 for the first call (curl from my machine, 2026-10-07, network included). Reranking is not measured.
 
+## MCP server (read-only, local)
+
+**Use case:** a Claude Code or other MCP client asks this knowledge base questions and gets answers with cited sources. [`backend/mcp_server/server.py`](backend/mcp_server/server.py) runs over stdio on the official Python SDK (`mcp`, pinned in [`backend/requirements-mcp.txt`](backend/requirements-mcp.txt), Python 3.11 or newer).
+
+| tool | what it does | annotations |
+|---|---|---|
+| `search_documents(query, limit=5, document=None)` | Hybrid search. Hits carry a citation id, the chunk text (`snippet`) and a score. | read-only, closed world |
+| `ask_question(question)` | Hybrid search, then the configured model. Returns the answer and the chunks it was given. | read-only, open world |
+| `list_documents()` | The indexed documents and their chunk counts. | read-only, closed world |
+
+A citation id is `file_name#chunk_index`, for example `risk-register-procedure.md#3`. `limit` is 1 to 20 and a query at most 500 characters. No tool writes, ingests or deletes. Every failure (empty query, bad limit, unknown document, Qdrant unreachable, no model answering) is an error result with a plain message, never error text inside a normal result.
+
+```bash
+cd backend && pip install -r requirements.txt -r requirements-mcp.txt
+claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/path/to/venv/bin/python /abs/path/to/backend/mcp_server/server.py
+```
+
+Use absolute paths. The server calls the backend's services in its own process, so it needs the backend's settings: `QDRANT_URL` (and `QDRANT_API_KEY` for a cloud cluster), and for `ask_question` a running Ollama or `GROQ_API_KEY`. A `.env` is read from the client's working directory, so pass the values with `-e` (or the `env` block of a Claude Desktop `mcpServers` entry, which does not inherit your shell). Add `--demo-corpus` to try it with no Qdrant and no model download: it serves the synthetic corpus from memory with the hashing embedder, and `ask_question` then fails with a plain error unless a model is configured.
+
+**Checked by:** in-process tests through the SDK's `Client`, a generated table of every tool against an empty query, an unknown document, a generation that is down and an empty index, and a subprocess test that checks stdout holds JSON-RPC and nothing else (the services print to stdout). `ask_question` raises when the generation layer reports `model_used == "none"`, because that layer returns error text as a normal response. The mutation check breaks the server several ways and each must fail a named test. Commands for the counts and the rest: [docs/evaluation.md](docs/evaluation.md#mcp-server).
+
+**Limits:** local stdio only, read-only, not deployed, and not tested against a hosted client: I ran it through the SDK's client and a raw JSON-RPC session, and did not register it in Claude Desktop or Claude Code. No rate limiting. Citations are the chunks the model was given, not proof the answer is supported by them. One test shows an instruction inside a document comes back as `snippet` text and changes nothing on the server; a model reading it may still be misled, so the client must treat retrieved text as untrusted.
+
 ## Architecture
 
 ```mermaid
@@ -131,9 +155,11 @@ python -m pytest tests/test_hybrid_ranking.py        # the ranking regression te
 python -m pytest tests/test_eval_fallback_counter.py tests/test_eval_fallback_cause.py tests/test_eval_labels.py \
     tests/test_eval_questions.py tests/test_eval_harness.py tests/test_eval_baseline.py \
     tests/test_eval_baseline_changes.py tests/test_eval_readme_claims.py tests/test_eval_mutation_targets.py
+pip install -r requirements-mcp.txt                  # the MCP server tests need the SDK
+python -m pytest tests/test_mcp_server.py tests/test_mcp_server_classes.py tests/test_mcp_server_stdio.py
 ```
 
-None of these needs a running service, a model download or a network. Run the two commands separately, as CI does. `backend/pytest.ini` skips what cannot run on a plain machine: the files that need the backend on port 8001 or Qdrant and an LLM, and `backend/test_setup.py`, which starts services at import and crashes a bare `pytest` during collection. Those are run by hand against a local backend.
+None of these needs a running service, a model download, a language model key or a network. Run the three pytest commands separately, as CI does. `backend/pytest.ini` skips what cannot run on a plain machine: the files that need the backend on port 8001 or Qdrant and an LLM, and `backend/test_setup.py`, which starts services at import and crashes a bare `pytest` during collection. Those are run by hand against a local backend.
 
 `eval/baseline.json` fails with a different message for each cause: `CHUNKING CHANGED` when the chunks changed (a text splitter bump), `QUESTIONS CHANGED` when a question or label was edited, `REGRESSION` when a pinned number fell by more than 0.02. A number may rise freely. To print how many tests and mutants there are, add `--collect-only -q` to the second command and read its last line, and run `python eval/mutation_check.py --list | wc -l`. The mutation check is described in [docs/evaluation.md](docs/evaluation.md).
 

@@ -46,11 +46,11 @@ The README tables come from the run: `python eval/run_eval.py --markdown t.md` w
 
 ## CI
 
-The `python-backend` job installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test and the evaluation tests as two separate pytest invocations, because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
+The `python-backend` job installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
 
 ## Mutation check
 
-`python eval/mutation_check.py` copies `app/`, `eval/` and `tests/` to a temporary directory, applies one change found by walking the syntax tree (never by line number), runs the evaluation tests against the copy and requires pytest to exit with code 1, a real test failure. Exit code 0 means the mutant survived and the tests are weak. Any other code means the mutant did not run, which proves nothing. A target that cannot be found fails the check, and `tests/test_eval_mutation_targets.py` runs that cheap half on every test run so a renamed function cannot silently leave a mutant guarding nothing. `python eval/mutation_check.py --list` prints every mutant (and `| wc -l` counts them). They break:
+`python eval/mutation_check.py` copies `app/`, `eval/`, `tests/` and `mcp_server/` to a temporary directory, applies one change found by walking the syntax tree (never by line number), runs the evaluation tests against the copy (the server tests for a server mutant) and requires pytest to exit with code 1, a real test failure. Exit code 0 means the mutant survived and the tests are weak. Any other code means the mutant did not run, which proves nothing. A target that cannot be found fails the check, and `tests/test_eval_mutation_targets.py` runs that cheap half on every test run so a renamed function cannot silently leave a mutant guarding nothing. `python eval/mutation_check.py --list` prints every mutant (and `| wc -l` counts them). They break:
 
 - the BM25 results removed from `hybrid_search`
 - the keyword bonus subtracted instead of added
@@ -62,5 +62,34 @@ The `python-backend` job installs `requirements-ci.txt` (the Render set plus pyt
 - the README table losing its recall columns
 - the bootstrap interval read from the wrong percentile at either end
 - the eval chunking following the environment, and label validation skipped
+- the MCP server, in `mcp_server/server.py`: see the next section
+
+The server mutants need the SDK (`pip install -r requirements-mcp.txt`); `--skip-mcp` leaves them out.
 
 Most of these are caught by the generated class tests (`test_eval_baseline_changes.py`, `test_eval_fallback_cause.py`, `test_eval_readme_claims.py`, `test_eval_labels.py`), each of which builds its cases from a product of every field, exception, column or label kind, so a case nobody listed is covered too.
+
+## MCP server
+
+`backend/mcp_server/server.py` is a read-only MCP server over stdio. The README has the use case, the tool table and the `claude mcp add` command; this section is the reference for how it is built and checked.
+
+**SDK.** `mcp==2.3.0` (`backend/requirements-mcp.txt`), Python 3.11 or newer; CI runs 3.12 and the author's machine 3.13. Before any tool was written the imports were checked against this release: `from mcp.server import MCPServer`, `from mcp import Client` (the same class as `mcp.client.Client`), `from mcp.server.mcpserver.exceptions import ToolError` and `from mcp_types import ToolAnnotations` (`ToolAnnotations` is not exported by `mcp` itself). `tests/test_mcp_server.py` keeps that proof: it fails if the pin and the installed release disagree or an import moves.
+
+**stdout.** The existing services print progress lines to stdout, at import and on every call, and stdout is the protocol channel, so one stray line corrupts the stream. The service imports run inside `contextlib.redirect_stdout(sys.stderr)`, every tool call runs the same way, and the SDK additionally diverts file descriptor 1 to stderr while it serves. `tests/test_mcp_server_stdio.py` starts `python -m mcp_server.server --demo-corpus` as a subprocess, sends a JSON-RPC session and requires every stdout line to be a JSON-RPC message, with the progress lines on stderr (so the test cannot pass by the services printing nothing). A global swap of `sys.stdout` was not used: the SDK reads `sys.stdout` when it starts serving, so a permanent swap would send the protocol to stderr.
+
+**Errors.** Any failure becomes a `ToolError` with a plain message: an empty or over-long query, a `limit` outside 1 to 20, an unknown `document` (the message lists the real ones), an unreachable vector store (the message names `QDRANT_URL`), any other exception (type and message, no traceback). `generation_service.generate` does not raise when every provider fails: it returns a normal response whose text is `[X] All LLM providers unavailable...` and whose `model_used` is `"none"`. `ask_question` turns that into a `ToolError`, so a client never reads the error text as an answer. An empty index returns an empty result with a message, and `ask_question` then calls no model.
+
+**Citations.** The id is `file_name#chunk_index`, built from the chunk's own metadata, returned by `search_documents` and `ask_question`. `ask_question` does not call `rag_service.query`: its sources carry only file name, page and a 100 character preview, so no id can be built from them, and the response cache could return sources from before this field existed. It runs the same steps itself (`hybrid_search`, `format_context`, `generate`), so the citations are exactly the chunks the model was given. Tests resolve every returned id against the chunker's output, built separately from the server.
+
+**Document filter.** `document` is an addition to the `search_documents(query, limit)` signature in the plan: it lets an agent scope a search, and gives the unknown-document failure something to fail on. It filters the top 100 ranked candidates, so a document whose chunks all rank below that is not reached.
+
+**Tests.** None needs Qdrant, a language model key or a model download: the index is `QdrantClient(":memory:")` through the real `VectorStoreService` with the hashing embedder, and generation is stubbed where an answer is needed.
+
+- `tests/test_mcp_server.py`: the tool list and annotations, search results and bounds, citation ids against the chunks, `ask_question` with a stub model and with a failing one, backend exceptions, stdout in process, an instruction inside a document returned as data.
+- `tests/test_mcp_server_classes.py`: a generated table of every tool against four failure kinds (the cases are an `itertools.product`, each pair with its expected outcome: a readable error, an empty result, a normal result or not applicable, which is proved from the tool's input schema).
+- `tests/test_mcp_server_stdio.py`: the real process over real stdio, once with raw JSON-RPC lines and once through the SDK's own stdio client.
+
+Print the counts with `python -m pytest tests/test_mcp_server.py tests/test_mcp_server_classes.py tests/test_mcp_server_stdio.py --collect-only -q` (last line) and `python eval/mutation_check.py --list | grep -c mcp-`.
+
+**Mutants.** The MCP mutants break `mcp_server/server.py`: the import-time stdout redirect removed, the per-call redirect removed, a citation id built from `total_chunks`, the `model_used == "none"` check removed, a `delete_document` tool registered, `read_only_hint` dropped, the limit check removed, the query length cap removed, the document filter ignored. Each must fail a test, and the runner prints which.
+
+**Not done, on purpose.** No rate limiting. Chunks without a file name or chunk index are left out of results (the chunker always sets both, so this only affects foreign data). `hybrid_search` still falls back to vector-only silently on an internal error and the server does not report that. The server was not registered in Claude Desktop or Claude Code, and nothing here was run against a hosted client.
