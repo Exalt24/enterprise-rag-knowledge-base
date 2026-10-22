@@ -41,6 +41,11 @@ class AdvancedRetrieval:
     - Combined: Best of both worlds!
     """
 
+    # Times hybrid_search gave up and answered with plain vector search. The fallback is silent
+    # by design (a user still gets results), so without this a broken BM25 branch looks exactly
+    # like a working hybrid search. The evaluation fails when this is above zero.
+    hybrid_fallback_count = 0
+
     def __init__(self):
         self.vector_store = vector_store
 
@@ -188,6 +193,7 @@ class AdvancedRetrieval:
             return documents
 
         except Exception as e:
+            self.hybrid_fallback_count += 1
             print(f"[!] Hybrid search failed, using vector only: {e}")
             # Fallback to basic vector search
             if with_scores:
