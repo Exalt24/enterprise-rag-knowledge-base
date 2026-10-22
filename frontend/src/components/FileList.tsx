@@ -16,10 +16,6 @@ export function FileList({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [refreshKey]);
-
   const fetchDocuments = async () => {
     try {
       const data = await api.listDocuments();
@@ -30,6 +26,10 @@ export function FileList({ refreshKey }: { refreshKey: number }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [refreshKey]);
 
   const handleDelete = async (fileName: string) => {
     if (!confirm(`Delete ${fileName}? This will remove it from the knowledge base.`)) {
