@@ -118,6 +118,12 @@ Use absolute paths. The server calls the backend's services in its own process, 
 
 **Limits:** local stdio only, read-only, not deployed, and not tested against a hosted client: I ran it through the SDK's client and a raw JSON-RPC session, and did not register it in Claude Desktop or Claude Code. No rate limiting. Citations are the chunks the model was given, not proof the answer is supported by them. One test shows an instruction inside a document comes back as `snippet` text and changes nothing on the server; a model reading it may still be misled, so the client must treat retrieved text as untrusted.
 
+## Agent skill (written scenarios, not results)
+
+[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent how to use the three MCP tools: when to search and when to ask, how to cite with `file_name#chunk_index`, what to say when nothing is found, how to recover when `ask_question` fails, and to treat retrieved text as data. To use it, copy the folder to a skills location your client reads (for Claude Code, `.claude/skills/`).
+
+Six evaluation scenarios in [`skills/querying-knowledge-base/evaluations/`](skills/querying-knowledge-base/evaluations/) were written before the skill. **I have not run them against a live agent**, so nothing here shows an agent follows the skill. The tests check the skill's format, that every tool, argument and field it names exists on the server, that its example and error table match what the server returns, and that replaying each scenario's tool calls on the demo index returns the chunks the scenario says a correct answer cites. Details: [docs/evaluation.md](docs/evaluation.md#agent-skill).
+
 ## Architecture
 
 ```mermaid
@@ -156,7 +162,8 @@ python -m pytest tests/test_eval_fallback_counter.py tests/test_eval_fallback_ca
     tests/test_eval_questions.py tests/test_eval_harness.py tests/test_eval_baseline.py \
     tests/test_eval_baseline_changes.py tests/test_eval_readme_claims.py tests/test_eval_mutation_targets.py
 pip install -r requirements-mcp.txt                  # the MCP server tests need the SDK
-python -m pytest tests/test_mcp_server.py tests/test_mcp_server_classes.py tests/test_mcp_server_stdio.py
+python -m pytest tests/test_mcp_server.py tests/test_mcp_server_classes.py tests/test_mcp_server_stdio.py \
+    tests/test_skill_scenarios.py tests/test_skill_file.py
 ```
 
 None of these needs a running service, a model download, a language model key or a network. Run the three pytest commands separately, as CI does. `backend/pytest.ini` skips what cannot run on a plain machine: the files that need the backend on port 8001 or Qdrant and an LLM, and `backend/test_setup.py`, which starts services at import and crashes a bare `pytest` during collection. Those are run by hand against a local backend.

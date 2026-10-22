@@ -93,3 +93,14 @@ Print the counts with `python -m pytest tests/test_mcp_server.py tests/test_mcp_
 **Mutants.** The MCP mutants break `mcp_server/server.py`: the import-time stdout redirect removed, the per-call redirect removed, a citation id built from `total_chunks`, the `model_used == "none"` check removed, a `delete_document` tool registered, `read_only_hint` dropped, the limit check removed, the query length cap removed, the document filter ignored. Each must fail a test, and the runner prints which.
 
 **Not done, on purpose.** No rate limiting. Chunks without a file name or chunk index are left out of results (the chunker always sets both, so this only affects foreign data). `hybrid_search` still falls back to vector-only silently on an internal error and the server does not report that. The server was not registered in Claude Desktop or Claude Code, and nothing here was run against a hosted client.
+
+## Agent skill
+
+`skills/querying-knowledge-base/` holds `SKILL.md` (frontmatter with `name` and `description` only, a body well under 500 lines) and `errors.md` (one level deep, linked from the body). The scenarios in `evaluations/` were committed before the skill, following the Agent Skills guidance to write evaluations first; `git log` shows the order.
+
+Each scenario file has a user request, the steps a correct agent takes, the failures it catches, and a JSON block the tests read: the tool calls with their arguments and expected outcome, the citation ids a correct answer uses, phrases that must sit in those chunks, terms that must be absent (for the "nothing found" case) and, for the instruction-in-a-document case, an extra chunk to add to the demo index.
+
+- `tests/test_skill_scenarios.py`: a generated table of every scenario against every required element (sections present, a JSON block with every key, only real tools, arguments and fields, well-formed ids, citations only from what a call returns, facts inside the cited chunks), and a replay of each scenario's calls on the demo index through the in-process client.
+- `tests/test_skill_file.py`: the format rules (allowed fields, name and description limits, third person, body length, links one level deep), the tools and fields the skill names against the server's own schemas, the example in the skill against what the server returns, `errors.md` against the real error messages in both directions, and a table of scenario against what the skill must hold for it.
+
+What this does not show: that a model follows the skill. No scenario has been run against a live agent. The replay uses the hashing embedder, so it proves the scenario's data exists and is reachable with the stated calls, not that the real embedding model ranks the same chunk first.
