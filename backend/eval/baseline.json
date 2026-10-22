@@ -1,6 +1,8 @@
 {
   "chunk_count": 27,
   "chunk_hash": "841a92cad58e94c9cf00c2ebe3723ff199d112fb1e0575f40d145693383a7f47",
+  "questions_hash": "ca80fa8f14fa4961bc103c00bde0435288af467166e3c09d10af254c3928ad05",
+  "calibration_hash": "7aa0c9fa8a23a2925e18bc521088710c792c8ccf14cca7e25688883b3d9aad26",
   "tolerance": 0.02,
   "numbers": {
     "vector": {

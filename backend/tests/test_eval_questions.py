@@ -25,8 +25,8 @@ from eval.harness import (  # noqa: E402
     phrase_in_text,
 )
 
-QUESTIONS = load_questions(QUESTIONS_PATH)
-CALIBRATION = load_questions(CALIBRATION_PATH)
+QUESTIONS = load_questions(QUESTIONS_PATH, validate=False)  # loading must not hide the label tests; validation has its own tests
+CALIBRATION = load_questions(CALIBRATION_PATH, validate=False)  # loading must not hide the label tests; validation has its own tests
 DOCS = {d.metadata["file_name"]: d.page_content for d in load_corpus()}
 CHUNKS = chunk_corpus(load_corpus())
 
