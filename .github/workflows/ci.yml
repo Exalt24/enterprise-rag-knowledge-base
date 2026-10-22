@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: |
             backend/requirements-ci.txt
             backend/requirements-render.txt
+            backend/requirements-mcp.txt
       # requirements-ci.txt is the Render set plus pytest: no torch and no CUDA wheels, so the install stays far
       # inside the 15 minute timeout. requirements.txt is a Windows pip freeze that pulls the CUDA torch wheel.
       - name: Install
@@ -39,6 +40,12 @@ jobs:
           start=$(date +%s)
           pip install -r requirements-ci.txt
           echo "pip install took $(( $(date +%s) - start )) seconds" | tee -a "$GITHUB_STEP_SUMMARY"
+      # The MCP SDK sits on top of the same install. It needs Python 3.11 or newer; this job runs 3.12.
+      - name: Install MCP SDK
+        run: |
+          start=$(date +%s)
+          pip install -r requirements-mcp.txt
+          echo "MCP SDK install took $(( $(date +%s) - start )) seconds" | tee -a "$GITHUB_STEP_SUMMARY"
       # Pinned test files only. The other files in tests/ need a running backend on :8001 or Qdrant and an LLM,
       # and backend/test_setup.py is a script that starts services at import and calls exit(1); a bare
       # `pytest` collects all of them and errors, which is why this step used to be dropped. pytest.ini
@@ -60,6 +67,14 @@ jobs:
           tests/test_eval_baseline_changes.py
           tests/test_eval_readme_claims.py
           tests/test_eval_mutation_targets.py
+      # The MCP server: in-process tool tests, the generated tool x failure table, and the real process over stdio.
+      # None of them needs Qdrant, a model download or a language model key. Its own invocation, like the others.
+      - name: MCP server tests
+        run: >
+          python -m pytest
+          tests/test_mcp_server.py
+          tests/test_mcp_server_classes.py
+          tests/test_mcp_server_stdio.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       - name: Mutation check

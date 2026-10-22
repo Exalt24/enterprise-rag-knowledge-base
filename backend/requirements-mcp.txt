@@ -1,0 +1,5 @@
+# The official MCP Python SDK, for backend/mcp_server/server.py. Needs Python 3.11 or newer.
+# Install it on top of the backend's own requirements (requirements.txt locally, requirements-ci.txt in CI).
+# Pinned to 2.3.0: the v2 line renamed FastMCP to MCPServer and moved the in-process Client; both imports were
+# proved against this release before the server was written (see the MCP section of docs/evaluation.md).
+mcp==2.3.0
