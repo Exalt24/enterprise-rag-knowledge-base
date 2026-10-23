@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 
-from eval.mutation_check import MUTANTS, TargetNotFound, mutated_source  # noqa: E402
+from eval.mutation_check import INVOCATIONS, MUTANTS, TargetNotFound, mutated_source  # noqa: E402
 
 
 @pytest.mark.parametrize("mutant", MUTANTS, ids=lambda m: m.name)
@@ -24,13 +24,22 @@ def test_each_mutant_finds_one_target_and_yields_valid_python(mutant):
         source = mutated_source(mutant)
     except TargetNotFound as exc:
         pytest.fail(f"mutant {mutant.name} is stale: {exc}")
-    compile(source, mutant.file, "exec")
+    if not mutant.text:  # a documentation mutant edits prose, which is not Python
+        compile(source, mutant.file, "exec")
 
 
 def test_every_guarded_area_has_a_mutant():
     names = " ".join(m.name for m in MUTANTS)
     areas = ("bm25-branch", "bonus", "threshold", "must-contain", "fallback-counter", "fallback-cause", "baseline-rise",
              "baseline-question-hash", "baseline-fallen-back", "readme-table", "bootstrap-upper", "bootstrap-lower",
-             "eval-chunking", "label-validation")
+             "eval-chunking", "label-validation", "readme-chunk-count", "readme-question-total", "readme-category-count",
+             "readme-n-column", "readme-real-model-date", "docs-calibration-count")
     for area in areas:
         assert area in names, f"no mutant covers {area}"
+
+
+def test_the_mutation_runner_runs_every_evaluation_test_file():
+    """A new tests/test_eval_*.py file that the runner does not run would guard nothing against a mutant."""
+    tests = Path(__file__).resolve().parent
+    on_disk = {f"tests/{p.name}" for p in tests.glob("test_eval_*.py")} - {"tests/test_eval_mutation_targets.py"}
+    assert on_disk == set(INVOCATIONS[0]), f"INVOCATIONS in eval/mutation_check.py is out of date: {sorted(on_disk ^ set(INVOCATIONS[0]))}"

@@ -244,6 +244,19 @@ enterprise-rag-knowledge-base/
 - If Qdrant is unreachable at start-up the API still boots in a degraded mode, and the retrieval endpoints return 503 until it recovers.
 - Each answer carries a `model_used` field, and `/api/stats` reports the model that is actually configured.
 
+## Known issues
+
+- Conversation memory is in-process and lost on restart.
+- CORS allows every origin. `GET /api/health` makes a real model call and can stall other requests on a slow local model.
+- `docker-compose.yml` predates the move to Qdrant and is unmaintained.
+- `DELETE /api/documents/{name}` deletes the chunks but reports `chunks_deleted: 0`.
+
+## The recording
+
+The GIF in the README was recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. It uses three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.
+
+The commands in the README use the code's default model, `llama3`. To match the recording, pull `qwen3:14b` and set `OLLAMA_MODEL=qwen3:14b`, `OLLAMA_REASONING=false` and `OLLAMA_TIMEOUT=300` before starting the backend (step 2 above). Answers from `llama3` will read differently.
+
 ## Deployment
 
 ### Docker

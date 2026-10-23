@@ -6,12 +6,20 @@ How the rerunnable retrieval evaluation in `backend/eval/` works, and what each 
 
 `python eval/run_eval.py` (from `backend/`) does this, all through the repo's own code:
 
-1. Reads the four documents in `eval/corpus/` and chunks them with `TextChunker`, the same chunker ingestion uses. Each chunk gets a stable id built from its file name and chunk index, so the order of a scroll over the store, and therefore BM25 tie-breaks, is the same on every run.
+1. Reads the four documents in `eval/corpus/` (a risk register procedure, a change control procedure, a monthly cost report guide and a lessons learned note on an invented project) and chunks them with `TextChunker`, the same chunker ingestion uses. Each chunk gets a stable id built from its file name and chunk index, so the order of a scroll over the store, and therefore BM25 tie-breaks, is the same on every run.
 2. Builds a `QdrantVectorStore` on `QdrantClient(":memory:")` and points the real `VectorStoreService` at it, then ingests through `VectorStoreService.add_documents`. Its search, scroll and stats code runs for real. The singleton's connection attributes are put back afterwards.
 3. Runs three retrieval modes: vector through `retrieval_service`, BM25 through the `BM25Retriever` that `AdvancedRetrieval` builds, and hybrid through `AdvancedRetrieval.hybrid_search`. Each returns its top 5 chunks.
 4. Scores every question and prints hit@1, hit@3, MRR, recall@3 and recall@5 per category, with a 95% bootstrap interval (2,000 resamples of the questions, fixed seed), the chance baseline, the number of hybrid fallbacks and the abstain thresholds.
 
 The services print to stdout on every call, so the harness swallows that to keep the report readable.
+
+## Reading the tables
+
+The README tables show each value with a 95% bootstrap interval over questions. With so few questions per category the intervals are wide, and the chance rows show what a random ranking of the same chunks scores. A cell at the ceiling (1.00 to 1.00) has no spread because every resample of the questions hits the same value; it means the method found it every time on these questions, not that it would on others.
+
+**What a hit means.** A multi-document question needs chunks from more than one document. hit@k counts it when any one needed chunk is in the top k; recall@k counts how many of the needed chunks are. So a hit@3 of 1.00 on a multi-document row says every question had at least one of its chunks in the top 3, and the recall columns say how much of what it needed was found. For the other categories a question has one needed chunk, so hit and recall are the same number.
+
+**Table 1 is a harness check.** Its embedder hashes words into a vector and has no idea what any of them mean, so the table shows that the harness and the ranking code run and are pinned. No quality claim and no "hybrid beats vector" claim comes from it. `eval/baseline.json` pins its chunk count, a hash of the chunk texts, a hash of each question file and its numbers.
 
 ## Embedders
 
@@ -29,7 +37,7 @@ The eval chunks with its own constants (`EVAL_CHUNK_SIZE` and `EVAL_CHUNK_OVERLA
 
 ## Unanswerable questions
 
-The retrieval code has no abstention. The evaluation defines the simplest one: decline when the best chunk's score is below a threshold. Each mode has its own score (cosine for vector, the highest BM25 score for BM25, the hybrid score for hybrid) and its own threshold. The threshold is picked on `eval/calibration.jsonl`, 16 questions kept apart from the eval set, as the midpoint that gives the best balanced accuracy (answerable kept plus unanswerable declined, halved). It is printed with every run.
+The retrieval code has no abstention. The evaluation defines the simplest one: decline when the best chunk's score is below a threshold. Each mode has its own score (cosine for vector, the highest BM25 score for BM25, the hybrid score for hybrid) and its own threshold. The threshold is picked on `eval/calibration.jsonl`, 16 calibration questions kept apart from the eval set, as the midpoint that gives the best balanced accuracy (answerable kept plus unanswerable declined, halved). It is printed with every run.
 
 ## Baseline
 
@@ -44,13 +52,27 @@ To re-pin after reading why it changed: `python eval/run_eval.py --write-baselin
 
 The README tables come from the run: `python eval/run_eval.py --markdown t.md` writes the table (hit@1, hit@3, MRR, recall@3, recall@5 for every row), and `tests/test_eval_readme_claims.py` compares Table 1 with a fresh deterministic run cell by cell. Table 2 comes from a local real-model run that CI cannot repeat, so that test checks its shape and that its columns agree with each other.
 
+**Every count the docs state is checked.** The chunk count, the number of documents, the question total, each category's question count, the calibration set size, the `n` column of both tables, the hybrid fallback count, the bootstrap resamples and the number of skill scenarios are compared with a fresh run by `tests/test_eval_readme_counts.py`. It scans the README, this page and `docs/mcp-server.md` for each of them, so a number written in prose and not in its table fails the test the moment the corpus or a question file changes. When a count moves, re-pin (`--write-baseline`), paste the new table with `--markdown`, and change the sentence that states it; the failing test names which one. Figures that only a real-model run produces cannot be rerun in CI: the same file requires every sentence about Table 2 or the real model to carry the date of its run, and Table 2's `n` column must still equal the current question counts, so adding a question means running `--embedder real` again.
+
+## Running the tests
+
+The README has the three pytest commands. None of them needs a running service, a model download, a language model key or a network. Run them separately, as CI does. `backend/pytest.ini` skips what cannot run on a plain machine: the files that need the backend on port 8001 or Qdrant and an LLM, and `backend/test_setup.py`, which starts services at import and crashes a bare `pytest` during collection. Those are run by hand against a local backend.
+
+`eval/baseline.json` fails with a different message for each cause: `CHUNKING CHANGED` when the chunks changed (a text splitter bump), `QUESTIONS CHANGED` when a question or label was edited, `REGRESSION` when a pinned number fell by more than 0.02. A number may rise freely. To print how many tests and mutants there are, add `--collect-only -q` to a pytest command and read its last line, and run `python eval/mutation_check.py --list | wc -l`.
+
 ## CI
 
-The `python-backend` job installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
+Timing from the first run on a cold pip cache, read from the job log (run 39863561524, 2026-10-22): install 31 seconds, whole job 146 seconds, against a 15 minute timeout.
+
+The `python-backend` job runs on every push and installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
+
+## Known limits of the retrieval code
+
+Two behaviours of the BM25 branch showed up while building the evaluation and are not changed. `BM25Retriever` splits on whitespace without lowercasing or stripping punctuation, so `Risks?` and `risks` are different terms. It also returns its top k chunks even when no query term matches, so the flat 0.15 bonus can go to a chunk with no keyword overlap. The fallback counter is read by the evaluation only, not by the API routes.
 
 ## Mutation check
 
-`python eval/mutation_check.py` copies `app/`, `eval/`, `tests/` and `mcp_server/` to a temporary directory, applies one change found by walking the syntax tree (never by line number), runs the evaluation tests against the copy (the server tests for a server mutant) and requires pytest to exit with code 1, a real test failure. Exit code 0 means the mutant survived and the tests are weak. Any other code means the mutant did not run, which proves nothing. A target that cannot be found fails the check, and `tests/test_eval_mutation_targets.py` runs that cheap half on every test run so a renamed function cannot silently leave a mutant guarding nothing. `python eval/mutation_check.py --list` prints every mutant (and `| wc -l` counts them). They break:
+`python eval/mutation_check.py` copies `app/`, `eval/`, `tests/` and `mcp_server/` (plus the README, `docs/` and `skills/` for the tests that read them) to a temporary directory, applies one change found by walking the syntax tree (never by line number), runs the evaluation tests against the copy (the server tests for a server mutant) and requires pytest to exit with code 1, a real test failure. Exit code 0 means the mutant survived and the tests are weak. Any other code means the mutant did not run, which proves nothing. A target that cannot be found fails the check, and `tests/test_eval_mutation_targets.py` runs that cheap half on every test run so a renamed function cannot silently leave a mutant guarding nothing. `python eval/mutation_check.py --list` prints every mutant (and `| wc -l` counts them). They break:
 
 - the BM25 results removed from `hybrid_search`
 - the keyword bonus subtracted instead of added
@@ -63,14 +85,15 @@ The `python-backend` job installs `requirements-ci.txt` (the Render set plus pyt
 - the bootstrap interval read from the wrong percentile at either end
 - the eval chunking following the environment, and label validation skipped
 - the MCP server, in `mcp_server/server.py`: see the next section
+- the docs, which are edited as text rather than code: the README chunk count left stale, a question total, a category count or a Table 1 `n` cell edited by one, Table 2 losing the date of its run, and the calibration count in this page edited by one. Each must fail a named test in `test_eval_readme_counts.py`.
 
 The server mutants need the SDK (`pip install -r requirements-mcp.txt`); `--skip-mcp` leaves them out.
 
-Most of these are caught by the generated class tests (`test_eval_baseline_changes.py`, `test_eval_fallback_cause.py`, `test_eval_readme_claims.py`, `test_eval_labels.py`), each of which builds its cases from a product of every field, exception, column or label kind, so a case nobody listed is covered too.
+Most of these are caught by the generated class tests (`test_eval_baseline_changes.py`, `test_eval_fallback_cause.py`, `test_eval_readme_claims.py`, `test_eval_readme_counts.py`, `test_eval_labels.py`), each of which builds its cases from a product of every field, exception, column or label kind, so a case nobody listed is covered too.
 
 ## MCP server
 
-`backend/mcp_server/server.py` is a read-only MCP server over stdio. The README has the use case, the tool table and the `claude mcp add` command; this section is the reference for how it is built and checked.
+`backend/mcp_server/server.py` is a read-only MCP server over stdio. The README has the use case and the `claude mcp add` command, [mcp-server.md](mcp-server.md) has the tool table, settings and limits; this section is the reference for how it is built and checked.
 
 **SDK.** `mcp==2.3.0` (`backend/requirements-mcp.txt`), Python 3.11 or newer; CI runs 3.12 and the author's machine 3.13. Before any tool was written the imports were checked against this release: `from mcp.server import MCPServer`, `from mcp import Client` (the same class as `mcp.client.Client`), `from mcp.server.mcpserver.exceptions import ToolError` and `from mcp_types import ToolAnnotations` (`ToolAnnotations` is not exported by `mcp` itself). `tests/test_mcp_server.py` keeps that proof: it fails if the pin and the installed release disagree or an import moves.
 
