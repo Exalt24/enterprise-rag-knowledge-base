@@ -16,6 +16,8 @@ flowchart TD
     G -- "sources, then tokens (SSE)" --> UI
 ```
 
+A second front door sits beside the API. `backend/mcp_server/server.py` is a read-only MCP server over stdio that calls the same services in its own process, with no HTTP hop: `search_documents`, `ask_question` and `list_documents`, each hit carrying a `file_name#chunk_index` citation id. It exists so an agent client can ask this knowledge base questions and cite what it read; [mcp-server.md](mcp-server.md) has the tools and limits. `skills/querying-knowledge-base/` is the Agent Skill that tells an agent when to search, how to cite and how to read the server's errors. The skill is written scenarios checked against the server, not a measured result.
+
 ## Ingestion
 
 Upload, parse, chunk, embed, store.
@@ -80,11 +82,14 @@ For streaming, `generate_stream` buffers the first chunk before emitting anythin
 
 ## Testing
 
-`backend/tests/` holds scripts run by hand against a local backend: ingestion, the RAG query path, the API endpoints, rate limiting, and `eval_retrieval.py`, which scores 20 questions by hit@k against a running API. There is no CI test run. The eval is a regression check on a small corpus, not a benchmark.
+CI (`.github/workflows/ci.yml`) runs on every push to main and on pull requests. Its Python job installs `requirements-ci.txt` and runs separate pytest invocations (the stubbed ranking test, the evaluation tests, and the MCP server and skill tests; separate because the ranking test stubs modules for the whole process), then `python eval/run_eval.py --check`, which compares a deterministic evaluation run with its pinned baseline, then `python eval/mutation_check.py`, which breaks the guarded code and these docs one way at a time and requires a test to fail each time. A front-end job lints and builds. None of it needs Qdrant, a model download or a key. The evaluation is a regression check on a small invented corpus, not a benchmark; [evaluation.md](evaluation.md) has the method, and a test checks every markdown page against a fresh run and against a list of claims that used to be true.
+
+The scripts in `backend/tests/` that talk to a running backend (the API endpoints, ingestion, the RAG query path, rate limiting, a RAG metrics script) and `eval_retrieval.py` are not in CI, and `pytest.ini` skips them. They are run by hand against a local backend. `eval_retrieval.py` is the hit@k script behind the earlier live-deployment measurement in [engineering-notes.md](engineering-notes.md#retrieval-accuracy); the rerunnable evaluation replaced it as the evidence.
 
 ## What I would change
 
 - Measure reranking locally and report it, since it has never been measured.
 - Score BM25 properly and normalise it, instead of the flat bonus.
 - Replace the in-process conversation checkpointer with a Redis or Postgres one.
-- Wire the tests into CI.
+- Run the live-backend scripts in a CI job against a Qdrant service container, so they stop depending on someone remembering to run them.
+- Run the skill's scenarios against a live agent, which nothing here has done.

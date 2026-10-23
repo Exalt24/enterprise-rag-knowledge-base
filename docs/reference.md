@@ -69,7 +69,7 @@ Drop the three files from `docs/sample-corpus/` onto the upload panel, or from t
 for f in docs/sample-corpus/*.md; do curl -X POST http://localhost:8001/api/ingest -F "file=@$f"; done
 ```
 
-That is 14 chunks (5, 5 and 4). Then ask, for example, "How many weeks of parental leave do I get, and can I split them?" or "What should I do if my laptop is stolen?".
+Each response reports how many chunks the file became. Then ask, for example, "How many weeks of parental leave do I get, and can I split them?" or "What should I do if my laptop is stolen?".
 
 ### 5. Use it
 
@@ -221,16 +221,24 @@ enterprise-rag-knowledge-base/
 │   │   │   ├── file_management.py
 │   │   │   └── ingestion.py
 │   │   └── main.py
-│   ├── tests/                         # see Testing
+│   ├── eval/                          # the rerunnable retrieval evaluation, its corpus and pinned baseline
+│   ├── mcp_server/                    # the read-only MCP server
+│   ├── tests/                         # what CI runs, plus scripts that need a running backend (README, Tests)
 │   ├── requirements.txt               # full local set
+│   ├── requirements-ci.txt            # what CI installs: the deployed set plus pytest
+│   ├── requirements-mcp.txt           # the MCP SDK, pinned
 │   ├── requirements-render.txt        # deployed image, no torch
 │   ├── keep_alive.py                  # pings Qdrant and Redis so the free tiers are not reclaimed; run it by hand, no workflow does
 │   └── Dockerfile
 ├── frontend/                          # Next.js app
+├── skills/querying-knowledge-base/    # the Agent Skill and its written scenarios
+├── .github/workflows/ci.yml           # tests, evaluation check and mutation check; front-end lint and build
 ├── docker-compose.yml
 ├── docs/
 │   ├── demo.gif                       # the README hero
 │   ├── engineering-notes.md           # the failures behind the README
+│   ├── evaluation.md                  # how the evaluation and its guards work
+│   ├── mcp-server.md                  # the MCP server: tools, registration, limits
 │   ├── reference.md                   # this file
 │   ├── sample-corpus/                 # documents for the quick start
 │   └── SYSTEM-KNOWLEDGE.md            # design notes
@@ -253,7 +261,7 @@ enterprise-rag-knowledge-base/
 
 ## The recording
 
-The GIF in the README was recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. It uses three short made-up handbook files, about 14 chunks. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.
+The GIF in the README was recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama. It uses three short made-up handbook files. The two answer stretches are shown at half speed, marked on screen. Sources are listed per chunk, so one file can appear twice in a citation list, and the dates in the document list read month/day/year.
 
 The commands in the README use the code's default model, `llama3`. To match the recording, pull `qwen3:14b` and set `OLLAMA_MODEL=qwen3:14b`, `OLLAMA_REASONING=false` and `OLLAMA_TIMEOUT=300` before starting the backend (step 2 above). Answers from `llama3` will read differently.
 
