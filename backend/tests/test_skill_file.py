@@ -155,6 +155,18 @@ def test_every_row_of_errors_md_matches_a_real_message(monkeypatch):
         assert any(all(frag.strip() in messages for frag in key) for key in row), f"errors.md describes a message the server never returns: {row}"
 
 
+def test_every_real_error_carries_the_tool_prefix_errors_md_describes(monkeypatch):
+    messages = _real_messages(monkeypatch)
+    errors = {label: text for label, text in messages.items() if label != "empty index"}  # the empty index is a normal result
+    for label, text in errors.items():
+        assert re.match(r"Error executing tool \w+: ", text), f"the {label} message no longer starts with the tool prefix: {text[:80]!r}"
+    example = re.findall(r"`(Error executing tool \w+: [^`]+)`", ERRORS.read_text(encoding="utf-8"))
+    assert example, "errors.md no longer shows a full error text with its prefix"
+    joined = " || ".join(errors.values())
+    for text in example:
+        assert text in joined, f"errors.md quotes an error text the server never returns: {text!r}"
+
+
 # CLASS-TABLE: scenario x what the skill must hold for it
 REQUIREMENTS = ("section_exists", "scenario_tools_named_in_skill", "section_gives_at_least_two_instructions")
 CASES = list(itertools.product(sorted(SCENARIOS), REQUIREMENTS))

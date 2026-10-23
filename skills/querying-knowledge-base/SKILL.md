@@ -26,7 +26,7 @@ Use the three read-only tools of the knowledge base server to answer from its in
 - Put the citation id right after the claim it supports, for example `risk-register-procedure.md#3`. The format is `file_name#chunk_index`. Copy it exactly from the `id` of a hit or citation.
 - Cite only ids that a tool returned in this conversation. Never build, guess or adjust one.
 - Cite the chunk whose `snippet` holds the fact, not a neighbouring chunk of the same document.
-- Two sources get two ids. Do not join sentences from two chunks into one claim that no single chunk states.
+- Two sources get two ids. Do not join sentences from different chunks into one claim that no single chunk states.
 - When the snippets cover only part of the question, say which part they cover and which they do not.
 
 ## When nothing is found
