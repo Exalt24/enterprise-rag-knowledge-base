@@ -41,7 +41,7 @@ Two defects turned up while proving that fix. A failed generation was cached for
 
 **Groq in the cloud, Ollama locally.** Both serve open-weight models and both are free to use at this scale. Groq is the only provider on the deployment, because Ollama is not installed there.
 
-**500-character chunks with 50 overlap.** A common starting range that keeps enough context per chunk without diluting it. I did not tune it against the eval set.
+**Chunks of 500 characters with 50 overlap.** A common starting range that keeps enough context per chunk without diluting it. I did not tune it against the eval set.
 
 **Hybrid by default.** Vector search misses exact keywords, and BM25 catches them. The measured gain is small (see above).
 
@@ -62,7 +62,7 @@ Measured on 2026-08-03 against the live deployment with `backend/tests/eval_retr
 - k=3 is saturated, so this benchmark is too easy to separate the strategies. k=1 is the number that discriminates.
 - Hybrid beat plain vector by 5 points at k=1, which is one question out of twenty. That is a direction, not a settled result.
 - A third column in the earlier measurement, "hybrid + rerank", is not reported here. Reranking does not run on the deployment (see above), so that column was the hybrid ordering again and said nothing about the reranker. I have not measured it locally.
-- The corpus is small, and the live collection has changed since (it now holds 93 chunks from other documents), so the harness needs the original corpus re-ingested to reproduce these numbers. It reads the stored chunk text from `/documents`, or from Qdrant directly when `QDRANT_URL` and `QDRANT_API_KEY` are set:
+- The corpus is small, and the live collection has changed since the 2026-08-03 run (it now holds 93 chunks from other documents), so the harness needs the original corpus re-ingested to reproduce these numbers. It reads the stored chunk text from `/documents`, or from Qdrant directly when `QDRANT_URL` and `QDRANT_API_KEY` are set:
 
 ```bash
 python backend/tests/eval_retrieval.py --base-url https://enterprise-rag-api.onrender.com/api

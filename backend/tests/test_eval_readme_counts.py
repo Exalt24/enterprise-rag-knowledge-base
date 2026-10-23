@@ -5,7 +5,8 @@ numbers were typed by hand, so adding a question or editing a corpus file and re
 wrong with every test green. Now every counted quantity (chunks, documents, questions in total and per category,
 calibration questions, the `n` column of both tables, the hybrid fallback count, the bootstrap resamples, the skill
 scenarios) is derived from a fresh deterministic run (the hashing embedder: no model download, no network) and compared
-with every sentence in the README, docs/evaluation.md and docs/mcp-server.md that states it.
+with every sentence that states it in every markdown page of the repo (tests/doc_pages.py finds them: the root, docs/,
+skills/ and anything they link), so a new page is read the day it is added.
 
 Three things keep it from passing by accident:
 1. A sentence that carries a number next to a counted noun this file does not read fails (`unread count`), so a new
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 
+from doc_pages import OTHER_RUN_DATES, markdown_pages, sentences  # noqa: E402
 from eval.embedders import HashingEmbeddings  # noqa: E402
 from eval.harness import (  # noqa: E402
     BOOTSTRAP_RESAMPLES,
@@ -38,10 +40,9 @@ from eval.harness import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS = ("README.md", "docs/evaluation.md", "docs/mcp-server.md")
-TEXT = {name: (ROOT / name).read_text(encoding="utf-8") for name in DOCS}
+DOCS = tuple(markdown_pages())  # found by looking at the repo (doc_pages.py), so a page added tomorrow is scanned tomorrow
+TEXT ={name: (ROOT / name).read_text(encoding="utf-8") for name in DOCS}
 SCENARIOS = ROOT / "skills" / "querying-knowledge-base" / "evaluations"
-OTHER_RUN_DATES = ("2026-08-03",)  # a sentence about the earlier 20-question run counts a corpus that no longer exists
 
 WORDS = "two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty"
 NUMBER = rf"(?<![\w.])(\d[\d,]*|{WORDS})"
@@ -83,29 +84,6 @@ UNREAD = re.compile(rf"(?<!top ){NUMBER}\b(?:[ -][\w-]+){{0,2}}[ -]{COUNTED_NOUN
 def to_int(text):
     text = text.replace(",", "").lower()
     return int(text) if text.isdigit() else WORD_VALUE[text]
-
-
-def sentences(text):
-    """Prose sentences of a markdown file: no code blocks, table rows or images; links and emphasis stripped."""
-    text = re.sub(r"```.*?```", "\n\n", text, flags=re.S)
-    paragraphs, current = [], []
-    for line in text.splitlines():
-        s = line.strip()
-        starts_new = s.startswith(("- ", "#"))
-        if not s or s.startswith(("|", "![", "<")):
-            paragraphs.append(" ".join(current))
-            current = []
-            continue
-        if starts_new and current:
-            paragraphs.append(" ".join(current))
-            current = []
-        current.append(s)
-    paragraphs.append(" ".join(current))
-    out = []
-    for p in paragraphs:
-        p = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p).replace("`", "").replace("*", "")
-        out.extend(x for x in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9(\[])", p) if x)
-    return out
 
 
 def counted_sentences(name):
@@ -158,7 +136,7 @@ def stated(source, quantity):
 
 # CLASS-TABLE: counted quantity x source that states it (prose of each doc, the n column of each README table); every statement equals the fresh run
 QUANTITIES = ("chunks", "documents", "questions", "calibration", "direct", "paraphrase", "multi-document", "unanswerable", "fallbacks", "resamples", "scenarios")
-SOURCES = ("README.md prose", "docs/evaluation.md prose", "docs/mcp-server.md prose", "README Table 1 n column", "README Table 2 n column")
+SOURCES = (*(f"{name} prose" for name in DOCS), "README Table 1 n column", "README Table 2 n column")
 COUNT_CASES = list(itertools.product(QUANTITIES, SOURCES))
 # pairs that MUST state the quantity today, so a reworded sentence cannot make the check pass by saying nothing
 MUST_STATE = {

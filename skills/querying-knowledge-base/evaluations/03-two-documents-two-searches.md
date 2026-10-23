@@ -1,4 +1,4 @@
-# Scenario 3: a question that needs two documents
+# Scenario 3: a question that spans more than one document
 
 ## User request
 
