@@ -55,29 +55,14 @@ jobs:
       # the whole process, and the evaluation must run against the real ones.
       - name: Ranking test (stubbed modules)
         run: python -m pytest tests/test_hybrid_ranking.py
+      # A glob, so a new evaluation test file is run without anyone remembering to list it (the shell expands it).
       - name: Evaluation tests
-        run: >
-          python -m pytest
-          tests/test_eval_fallback_counter.py
-          tests/test_eval_fallback_cause.py
-          tests/test_eval_labels.py
-          tests/test_eval_questions.py
-          tests/test_eval_harness.py
-          tests/test_eval_baseline.py
-          tests/test_eval_baseline_changes.py
-          tests/test_eval_readme_claims.py
-          tests/test_eval_mutation_targets.py
+        run: python -m pytest tests/test_eval_*.py
       # The MCP server: in-process tool tests, the generated tool x failure table, and the real process over stdio;
       # then the skill's written scenarios replayed against the server. None of them needs Qdrant, a model download or
       # a language model key. Its own invocation, like the others.
       - name: MCP server and skill tests
-        run: >
-          python -m pytest
-          tests/test_mcp_server.py
-          tests/test_mcp_server_classes.py
-          tests/test_mcp_server_stdio.py
-          tests/test_skill_scenarios.py
-          tests/test_skill_file.py
+        run: python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       - name: Mutation check

@@ -6,6 +6,16 @@ Design notes for the Enterprise RAG Knowledge Base: how a document becomes searc
 
 Each service in `backend/app/services/` has one job: `document_parser`, `chunking`, `embeddings`, `vector_store`, `retrieval`, `advanced_retrieval`, `generation`, `cache`, `conversation`, `file_management`, `ingestion`, and `rag`, which orchestrates the rest. Heavy resources (the embedding model, the vector store connection, the cache) are singletons that load on first use rather than at import. That second part is not style: on a 512 MB instance, anything expensive at import time runs before uvicorn binds its port, and the platform kills the process.
 
+```mermaid
+flowchart TD
+    UI["Next.js front end"] --> API["FastAPI"]
+    API --> R["Retrieval<br/>vector + BM25 hybrid<br/>optional cross-encoder"]
+    R --> Q[("Qdrant")]
+    API --> C[("Redis<br/>cache + rate limit")]
+    API --> G["Generation<br/>Groq, or Ollama locally"]
+    G -- "sources, then tokens (SSE)" --> UI
+```
+
 ## Ingestion
 
 Upload, parse, chunk, embed, store.

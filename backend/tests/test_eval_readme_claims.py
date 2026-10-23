@@ -132,7 +132,7 @@ def test_the_readme_says_a_ceiling_cell_has_no_spread():
 
 
 NO_COUNTS = (r"\b\d+ (?:tests?|mutants?)\b", r"\b(?:ten|nine|eleven|twelve|thirteen|fourteen|fifteen) (?:tests|mutants|things)\b", r"\b\d+ of \d+ mutants\b", r"\b\d+ passed\b")
-COUNT_CASES = list(itertools.product(("README.md", "docs/evaluation.md"), NO_COUNTS))
+COUNT_CASES = list(itertools.product(("README.md", "docs/evaluation.md", "docs/mcp-server.md"), NO_COUNTS))
 
 
 @pytest.mark.parametrize("name,pattern", COUNT_CASES, ids=lambda v: v)
@@ -140,3 +140,32 @@ def test_no_test_or_mutant_count_is_written_into_prose(name, pattern):
     text = (ROOT / name).read_text(encoding="utf-8")
     # a count in prose goes stale at the next test; the docs say how to print it instead
     assert not re.search(pattern, text), f"{name} writes a count that matches {pattern}: {re.search(pattern, text).group(0)!r}"
+
+
+# ---------------------------------------------------------------- numbers the prose quotes from the tables
+
+PROSE = " ".join(README.split())
+
+
+def _value(table, method, category, column):
+    return float(CELL.match(TABLES[table][1][(method, category)][column]).group(1))
+
+
+def test_the_prose_recall_figures_are_the_table_2_cells():
+    said = re.search(r"recall@3 is (\d\.\d\d) for vector, (\d\.\d\d) for BM25 and (\d\.\d\d) for hybrid", PROSE)
+    assert said, "the sentence quoting recall@3 for the three methods moved; update this test with it"
+    cells = [_value("Table 2", method, "multi-document", "recall@3") for method in ("vector", "bm25", "hybrid")]
+    assert [float(g) for g in said.groups()] == cells, f"the prose says {said.groups()} but Table 2 has {cells}"
+
+
+@pytest.mark.parametrize("table,method", list(itertools.product(README_TABLES, METHODS)), ids=lambda v: v)
+def test_the_prose_hit_3_of_1_00_on_multi_document_is_in_both_tables(table, method):
+    assert "hit@3 is 1.00 for all three methods in both tables" in PROSE, "the hit@3 sentence moved; update this test with it"
+    assert _value(table, method, "multi-document", "hit@3") == 1.0, f"{table} {method} multi-document hit@3 is no longer 1.00, so the prose is wrong"
+
+
+def test_the_declined_fraction_in_the_prose_is_its_own_ratio():
+    said = re.search(r"(\d+) of the (\d+) unanswerable questions were declined \((\d\.\d\d), interval (\d\.\d\d) to (\d\.\d\d)\)", PROSE)
+    assert said, "the sentence quoting the declined unanswerable questions moved; update this test with it"
+    declined, total, value, low, high = int(said.group(1)), int(said.group(2)), *(float(g) for g in said.groups()[2:])
+    assert round(declined / total, 2) == value and low <= value <= high

@@ -13,6 +13,8 @@ of the check. A mutant whose target cannot be found also fails the check: it mea
     python eval/mutation_check.py --skip-mcp      leave out the MCP server mutants (they need requirements-mcp.txt)
 
 The MCP server mutants break mcp_server/server.py and run only the server tests; each must fail a named test.
+The documentation mutants (readme-*, docs-*) edit a number or a date in the README or docs/evaluation.md and run only the
+tests that read them: a count written by hand and left stale must fail tests/test_eval_readme_counts.py.
 """
 import argparse
 import ast
@@ -39,6 +41,7 @@ INVOCATIONS = [
         "tests/test_eval_baseline_changes.py",
         "tests/test_eval_fallback_cause.py",
         "tests/test_eval_readme_claims.py",
+        "tests/test_eval_readme_counts.py",
         "tests/test_eval_labels.py",
         "tests/test_eval_fallback_counter.py",
         "tests/test_eval_harness.py",
@@ -50,6 +53,10 @@ INVOCATIONS = [
 # The MCP server mutants run only the server tests (they need the SDK: pip install -r requirements-mcp.txt).
 MCP_SERVER = "mcp_server/server.py"
 MCP_RUNS = (("tests/test_mcp_server.py", "tests/test_mcp_server_classes.py", "tests/test_mcp_server_stdio.py"),)
+# The documentation mutants edit TEXT (the README, docs/evaluation.md), not code, and run only the tests that read the docs.
+DOC_RUNS = (("tests/test_eval_readme_counts.py", "tests/test_eval_readme_claims.py"),)
+README = "../README.md"  # relative to backend/, so the same path works in the real tree and in the temporary copy
+EVALUATION_DOC = "../docs/evaluation.md"
 
 
 class TargetNotFound(Exception):
@@ -369,6 +376,50 @@ def mcp_document_filter_ignored(tree):
     comp.generators[0].ifs = [ast.Constant(True)]
 
 
+# ---------------------------------------------------------------- the documentation mutants (each edits the TEXT of a doc)
+
+
+def _bump_first(text: str, pattern: str) -> str:
+    """Add one to the number held by group 1 of the first match of `pattern`."""
+    found = re.search(pattern, text)
+    if not found:
+        raise TargetNotFound(f"no sentence matches {pattern!r}: the doc was reworded, update the mutant")
+    return text[: found.start(1)] + str(int(found.group(1)) + 1) + text[found.end(1) :]
+
+
+def readme_chunk_count_stale(text: str) -> str:
+    """The README still gives the chunk count from before a corpus edit (one fewer than the run produces)."""
+    return _bump_first(text, r"They give (\d+) chunks")
+
+
+def readme_question_total_edited_by_one(text: str) -> str:
+    """The README's question total is off by one."""
+    return _bump_first(text, r"The (\d+) questions in")
+
+
+def readme_category_count_edited_by_one(text: str) -> str:
+    """The README's count of unanswerable questions is off by one."""
+    return _bump_first(text, r"and (\d+) unanswerable\.")
+
+
+def readme_n_column_edited_by_one(text: str) -> str:
+    """The n cell of the first Table 1 row is off by one."""
+    return _bump_first(text, r"\| vector \| direct \| (\d+) \|")
+
+
+def readme_real_model_date_removed(text: str) -> str:
+    """Table 2 (the real-model run CI cannot repeat) loses the date of its run."""
+    edited, n = re.subn(r"(\*\*Table 2, real model \(local run) on \d{4}-\d{2}-\d{2}\)", r"\1)", text, count=1)
+    if not n:
+        raise TargetNotFound("the Table 2 lead-in no longer carries a run date to remove")
+    return edited
+
+
+def evaluation_doc_calibration_count_edited_by_one(text: str) -> str:
+    """docs/evaluation.md gives the calibration set size off by one."""
+    return _bump_first(text, r"(\d+) calibration questions")
+
+
 def _replace(tree: ast.AST, old: ast.AST, new: ast.AST) -> None:
     for parent in ast.walk(tree):
         for field, value in ast.iter_fields(parent):
@@ -389,6 +440,7 @@ class Mutant:
     file: str
     apply: Callable[[ast.AST], None]
     invocations: Optional[tuple] = None  # pytest invocations to run; None means the evaluation's INVOCATIONS
+    text: bool = False  # True: `apply` takes the file's text and returns the edited text (a doc), not a syntax tree
 
     @property
     def runs(self) -> List[List[str]]:
@@ -425,12 +477,23 @@ MUTANTS: List[Mutant] = [
     Mutant("mcp-limit-bound-removed", MCP_SERVER, mcp_limit_bound_removed, MCP_RUNS),
     Mutant("mcp-query-length-cap-removed", MCP_SERVER, mcp_query_length_cap_removed, MCP_RUNS),
     Mutant("mcp-document-filter-ignored", MCP_SERVER, mcp_document_filter_ignored, MCP_RUNS),
+    Mutant("readme-chunk-count-stale", README, readme_chunk_count_stale, DOC_RUNS, text=True),
+    Mutant("readme-question-total-edited-by-one", README, readme_question_total_edited_by_one, DOC_RUNS, text=True),
+    Mutant("readme-category-count-edited-by-one", README, readme_category_count_edited_by_one, DOC_RUNS, text=True),
+    Mutant("readme-n-column-edited-by-one", README, readme_n_column_edited_by_one, DOC_RUNS, text=True),
+    Mutant("readme-real-model-date-removed", README, readme_real_model_date_removed, DOC_RUNS, text=True),
+    Mutant("docs-calibration-count-edited-by-one", EVALUATION_DOC, evaluation_doc_calibration_count_edited_by_one, DOC_RUNS, text=True),
 ]
 
 
 def mutated_source(mutant: Mutant, root: Path = BACKEND) -> str:
     """Apply a mutant to the file under `root` and return the new source (raises TargetNotFound if the code moved)."""
     original = (root / mutant.file).read_text(encoding="utf-8")
+    if mutant.text:
+        changed = mutant.apply(original)
+        if changed == original:
+            raise TargetNotFound(f"{mutant.name} did not change the doc")
+        return changed
     tree = ast.parse(original)
     mutant.apply(tree)
     ast.fix_missing_locations(tree)
@@ -450,10 +513,10 @@ def _copy_tree(destination: Path) -> Path:
         shutil.copytree(BACKEND / part, target / part, ignore=ignore)
     shutil.copy(BACKEND / "pytest.ini", target / "pytest.ini")
     shutil.copy(BACKEND / "requirements-mcp.txt", target / "requirements-mcp.txt")  # a test checks the SDK pin against it
-    # the README tests read the README and docs/evaluation.md beside backend/
-    (destination / "docs").mkdir(exist_ok=True)
+    # the README tests read the README, docs/ and the skill's scenario folder beside backend/
+    for part in ("docs", "skills"):
+        shutil.copytree(BACKEND.parent / part, destination / part, ignore=shutil.ignore_patterns("*.gif"))
     shutil.copy(BACKEND.parent / "README.md", destination / "README.md")
-    shutil.copy(BACKEND.parent / "docs" / "evaluation.md", destination / "docs" / "evaluation.md")
     return target
 
 

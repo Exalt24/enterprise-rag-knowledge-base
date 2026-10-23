@@ -9,6 +9,10 @@ An earlier revision of this README advertised an accuracy series for vector, hyb
 
 The bug: `hybrid_search` applied `1 / (1 + score)` to "convert distance to similarity", but the collection uses cosine distance, where Qdrant already returns a similarity and higher is better. That inverted the ranking. A 0.82 match scored 0.549 while a 0.12 match scored 0.893, so the default retrieval path was promoting the least relevant chunks. It showed up as "I don't have that information" on questions that plain vector search answered correctly. The fix is to use the cosine score directly, clamped to 0 to 1. See [Retrieval accuracy](#retrieval-accuracy) for what I measured afterwards.
 
+### The silent fallback
+
+`hybrid_search` catches every exception and answers with plain vector search, so a broken BM25 branch looked exactly like working hybrid retrieval. The engine now counts its fallbacks and keeps the first cause, and the evaluation fails when the count is above zero. The fallback itself is still there; the API routes do not read the counter.
+
 ### What broke in deployment
 
 The first deployment crash-looped on Render's 512 MB free instance, and from outside it looked exactly like a slow cold start. It took several rounds to find the real causes:
