@@ -1,3 +1,4 @@
+# LIFESPAN: permanent
 """Which markdown pages the doc tests read, found by looking at the repository and never typed.
 
 A page is in scope when it sits in the repo root, anywhere under docs/ or skills/, or is linked (directly or through
