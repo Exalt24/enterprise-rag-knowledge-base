@@ -14,7 +14,8 @@ of the check. A mutant whose target cannot be found also fails the check: it mea
 
 The MCP server mutants break mcp_server/server.py and run only the server tests; each must fail a named test.
 The documentation mutants (readme-*, docs-*) edit a number or a date in the README or docs/evaluation.md and run only the
-tests that read them: a count written by hand and left stale must fail tests/test_eval_readme_counts.py.
+tests that read them: a count written by hand and left stale must fail tests/test_eval_readme_counts.py, and a claim that
+stopped being true (the design notes saying there is no CI test run) must fail tests/test_eval_docs_not_stale.py.
 """
 import argparse
 import ast
@@ -39,6 +40,7 @@ HARNESS = "eval/harness.py"
 INVOCATIONS = [
     [
         "tests/test_eval_baseline_changes.py",
+        "tests/test_eval_docs_not_stale.py",
         "tests/test_eval_fallback_cause.py",
         "tests/test_eval_readme_claims.py",
         "tests/test_eval_readme_counts.py",
@@ -54,9 +56,10 @@ INVOCATIONS = [
 MCP_SERVER = "mcp_server/server.py"
 MCP_RUNS = (("tests/test_mcp_server.py", "tests/test_mcp_server_classes.py", "tests/test_mcp_server_stdio.py"),)
 # The documentation mutants edit TEXT (the README, docs/evaluation.md), not code, and run only the tests that read the docs.
-DOC_RUNS = (("tests/test_eval_readme_counts.py", "tests/test_eval_readme_claims.py"),)
+DOC_RUNS = (("tests/test_eval_readme_counts.py", "tests/test_eval_readme_claims.py", "tests/test_eval_docs_not_stale.py"),)
 README = "../README.md"  # relative to backend/, so the same path works in the real tree and in the temporary copy
 EVALUATION_DOC = "../docs/evaluation.md"
+DESIGN_NOTES = "../docs/SYSTEM-KNOWLEDGE.md"
 
 
 class TargetNotFound(Exception):
@@ -420,6 +423,14 @@ def evaluation_doc_calibration_count_edited_by_one(text: str) -> str:
     return _bump_first(text, r"(\d+) calibration questions")
 
 
+def design_notes_claim_there_is_no_ci(text: str) -> str:
+    """The design notes' Testing section says again that there is no CI test run, which CI has long since contradicted."""
+    marker = "\n## What I would change"
+    if text.count(marker) != 1:
+        raise TargetNotFound("docs/SYSTEM-KNOWLEDGE.md no longer has exactly one '## What I would change' heading to anchor on")
+    return text.replace(marker, "\nThere is no CI test run.\n" + marker, 1)
+
+
 def _replace(tree: ast.AST, old: ast.AST, new: ast.AST) -> None:
     for parent in ast.walk(tree):
         for field, value in ast.iter_fields(parent):
@@ -483,6 +494,7 @@ MUTANTS: List[Mutant] = [
     Mutant("readme-n-column-edited-by-one", README, readme_n_column_edited_by_one, DOC_RUNS, text=True),
     Mutant("readme-real-model-date-removed", README, readme_real_model_date_removed, DOC_RUNS, text=True),
     Mutant("docs-calibration-count-edited-by-one", EVALUATION_DOC, evaluation_doc_calibration_count_edited_by_one, DOC_RUNS, text=True),
+    Mutant("docs-design-notes-claim-there-is-no-ci", DESIGN_NOTES, design_notes_claim_there_is_no_ci, DOC_RUNS, text=True),
 ]
 
 

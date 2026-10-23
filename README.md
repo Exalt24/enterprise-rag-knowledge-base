@@ -14,7 +14,7 @@ The hosted copy is offline: the free-tier host suspended its services in October
 
 ## What broke
 
-Upload documents (PDF, DOCX, TXT, Markdown), ask questions, get answers with citations: FastAPI and LangChain over Qdrant, a Next.js front end. I built it to see where a retrieval pipeline actually fails, so most of this README is about the failures.
+Upload documents (PDF, DOCX, TXT, Markdown), ask questions, get answers with citations: FastAPI and LangChain over Qdrant, a Next.js front end. I built it to see where a retrieval pipeline fails, so most of this README is about the failures.
 
 
 - **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match scored 0.893. Every test stayed green because they only checked that results came back. The fix uses the cosine score directly, `backend/tests/test_hybrid_ranking.py` now fails on the original line, and the mutation check puts the bug back and shows a test going red. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent) because it predated the fix.
@@ -30,7 +30,7 @@ Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
 The corpus is **synthetic**: four documents invented for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing no real organisation and claiming no domain experience. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
 
-Everything goes through the repo's own chunker, vector store and retrieval code; only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread because every resample hits the same value; it means the method found it every time on these questions, not on others.
+Everything goes through the repo's own chunker, vector store and retrieval code; only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread: every resample hits the same value, so the method found it every time on these questions, not on others.
 
 **What a hit means.** On a multi-document question hit@k counts it when any one needed chunk is in the top k, and recall@k counts how many of the needed chunks are. Elsewhere a question has one needed chunk, so the two are equal.
 
@@ -86,16 +86,19 @@ What it says: every method beats the chance rows by a wide margin. Hybrid did no
 
 ```bash
 cd backend && pip install -r requirements.txt -r requirements-mcp.txt
-claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/path/to/venv/bin/python /abs/path/to/backend/mcp_server/server.py
+# macOS and Linux
+claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/backend/venv/bin/python /abs/backend/mcp_server/server.py
+# Windows
+claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- C:\abs\backend\venv\Scripts\python.exe C:\abs\backend\mcp_server\server.py
 ```
 
-Use absolute paths, and add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
+Use absolute paths (`abs` stands for your clone's location), and add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
 
-**Limits:** local stdio only, read-only, not deployed and not tested against a hosted client (I ran it through the SDK's client and a raw JSON-RPC session, not Claude Desktop or Claude Code). No rate limiting. Citations are the chunks the model was given, not proof the answer is supported by them, and retrieved text may carry an instruction, so the client must treat it as untrusted.
+**Limits:** local stdio only, read-only, not deployed, no rate limiting, and never run in Claude Desktop or Claude Code (I used the SDK's client and a raw JSON-RPC session). Citations are the chunks the model was given, not proof the answer is supported by them, and retrieved text may carry an instruction, so the client must treat it as untrusted.
 
 ## Agent skill (written scenarios, not results)
 
-[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to where your client reads skills (for Claude Code, `.claude/skills/`). Its scenarios were written before the skill and **I have not run them against a live agent**: the tests only replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
+[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill and **I have not run them against a live agent**: the tests only replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
 
 ## Architecture
 
@@ -112,7 +115,7 @@ QDRANT_URL=http://localhost:6333 python -m app.main            # http://localhos
 cd ../frontend && npm install && echo "NEXT_PUBLIC_API_URL=http://localhost:8001/api" > .env.local && npm run dev
 ```
 
-Sample documents: [`docs/sample-corpus/`](docs/sample-corpus/). Full steps, API examples, the Groq cloud setup and deployment: [docs/reference.md](docs/reference.md).
+Sample documents: [`docs/sample-corpus/`](docs/sample-corpus/). Full steps, API examples, Groq and deployment: [docs/reference.md](docs/reference.md).
 
 ## Tests
 
@@ -124,14 +127,14 @@ pip install -r requirements-mcp.txt                  # the MCP server tests need
 python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 ```
 
-None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test compares every count this README states about the evaluation with a fresh run. Baseline failures, what the pytest config skips, how to print the test and mutant counts and the CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
+None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test compares every count the docs state with a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
 
 ## Limits and not done
 
-- Table 1 is a test-double run that proves the harness and the ranking code, not retrieval quality. Table 2 is a local run on my machine (2026-10-23) and CI does not repeat it.
+- Table 1 only proves the harness and the ranking code. Table 2 is a local run on my machine (2026-10-23) that CI does not repeat.
 - The corpus is invented and small and I wrote the questions from it. That flatters retrieval and gives wide intervals, so hybrid against vector is a direction at best, and on this set not even that. It is a regression check, not a benchmark.
 - The BM25 branch does not lowercase or strip punctuation and returns its top k chunks even with no matching term, so the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
-- The fallback counter is read by the evaluation only, not by the API routes. CI runs Python 3.12 and my local runs 3.13; the Table 1 output matched line for line.
+- The fallback counter is read by the evaluation only, not by the API routes. CI runs Python 3.12 and my local runs 3.13; the Table 1 output matched.
 - Cross-encoder reranking works locally only, and I have not measured it. HyDE and multi-query exist as library functions, not API routes, and are not evaluated.
 - Smaller known issues (conversation memory lost on restart, CORS open to every origin, a health check that calls the model, an unmaintained `docker-compose.yml`, a `DELETE` that reports `chunks_deleted: 0`): [docs/reference.md](docs/reference.md#known-issues).
 

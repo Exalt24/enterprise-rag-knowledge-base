@@ -2,7 +2,9 @@
 
 Each row is a message the knowledge base tools return as an error result, and the action to take. The messages are written by the server in `backend/mcp_server/server.py`.
 
-| message starts with | meaning | do this |
+The client shows the text with a prefix that names the tool, so a real error reads `Error executing tool search_documents: query is empty. Give a non-empty query of at most 500 characters.` Match a row against the text after that prefix.
+
+| message after the prefix starts with | meaning | do this |
 |---|---|---|
 | `query is empty` or `question is empty` | The text was blank. | Build the query from the user's request and call again. |
 | `query is N characters long; the limit is 500` | The text is too long. | Shorten it to the key terms. |

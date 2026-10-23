@@ -117,7 +117,7 @@ curl -N -X POST http://localhost:8001/api/query/stream \
   -d '{"question":"How much is the learning budget?","k":3,"use_hybrid_search":true}'
 ```
 
-This is the output from the sample documents, run locally on 2026-10-11 (the `sources` frame is shortened here; the real one carries a 100-character preview for each of the three chunks, and the token frames are cut down to a few):
+This is the output from the sample documents, run locally on 2026-10-11 (the `sources` frame is shortened here; the real one carries a 100-character preview for each retrieved chunk, and the token frames are cut down to a few):
 
 ```
 event: sources

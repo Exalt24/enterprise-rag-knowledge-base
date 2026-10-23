@@ -33,7 +33,7 @@ def test_every_guarded_area_has_a_mutant():
     areas = ("bm25-branch", "bonus", "threshold", "must-contain", "fallback-counter", "fallback-cause", "baseline-rise",
              "baseline-question-hash", "baseline-fallen-back", "readme-table", "bootstrap-upper", "bootstrap-lower",
              "eval-chunking", "label-validation", "readme-chunk-count", "readme-question-total", "readme-category-count",
-             "readme-n-column", "readme-real-model-date", "docs-calibration-count")
+             "readme-n-column", "readme-real-model-date", "docs-calibration-count", "docs-design-notes-claim-there-is-no-ci")
     for area in areas:
         assert area in names, f"no mutant covers {area}"
 

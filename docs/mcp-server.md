@@ -18,10 +18,13 @@ A citation id is `file_name#chunk_index`, for example `risk-register-procedure.m
 
 ```bash
 cd backend && pip install -r requirements.txt -r requirements-mcp.txt
-claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/path/to/venv/bin/python /abs/path/to/backend/mcp_server/server.py
+# macOS and Linux
+claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/backend/venv/bin/python /abs/backend/mcp_server/server.py
+# Windows
+claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- C:\abs\backend\venv\Scripts\python.exe C:\abs\backend\mcp_server\server.py
 ```
 
-Use absolute paths. The server calls the backend's services in its own process, so it needs the backend's settings: `QDRANT_URL` (and `QDRANT_API_KEY` for a cloud cluster), and for `ask_question` a running Ollama or `GROQ_API_KEY`. A `.env` is read from the client's working directory, so pass the values with `-e` (or the `env` block of a Claude Desktop `mcpServers` entry, which does not inherit your shell). Add `--demo-corpus` to try it with no Qdrant and no model download: it serves the synthetic corpus from memory with the hashing embedder, and `ask_question` then fails with a plain error unless a model is configured.
+Use absolute paths; `abs` stands for the location of your clone, and the interpreter is the one from the virtual environment you installed into (`venv/bin/python` on macOS and Linux, `venv\Scripts\python.exe` on Windows). In a JSON `mcpServers` entry the Windows backslashes are doubled. The server calls the backend's services in its own process, so it needs the backend's settings: `QDRANT_URL` (and `QDRANT_API_KEY` for a cloud cluster), and for `ask_question` a running Ollama or `GROQ_API_KEY`. A `.env` is read from the client's working directory, so pass the values with `-e` (or the `env` block of a Claude Desktop `mcpServers` entry, which does not inherit your shell). Add `--demo-corpus` to try it with no Qdrant and no model download: it serves the synthetic corpus from memory with the hashing embedder, and `ask_question` then fails with a plain error unless a model is configured.
 
 ## Checked by
 
