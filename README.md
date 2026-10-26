@@ -19,7 +19,7 @@ Upload documents (PDF, DOCX, TXT, Markdown), ask questions, get answers with cit
 
 - **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match scored 0.893. Every test stayed green because they only checked that results came back. The fix uses the cosine score directly, `backend/tests/test_hybrid_ranking.py` now fails on the original line, and the mutation check puts the bug back and shows a test going red. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent) because it predated the fix.
 - **A silent fallback.** `hybrid_search` catches every exception and answers with plain vector search, so a broken BM25 branch looked like working hybrid retrieval. The engine now counts its fallbacks and the evaluation fails when the count is above zero.
-- **A deploy that looked like a slow cold start.** The 512 MB free instance was OOM-killed on import by the 526.6 MB default torch wheel. The deployed image now uses fastembed (the same all-MiniLM-L6-v2 weights through ONNX Runtime, so stored vectors stayed valid): under a real 512 MB cap, import went from about two minutes to 1.87 seconds and peak memory from 438 MiB to 259 MiB (measured once on 2026-09-07; the output was not kept).
+- **A deploy that looked like a slow cold start.** The 512 MB free instance was OOM-killed on import by the 526.6 MB default torch wheel. The deployed image now uses fastembed (same weights, ONNX Runtime, stored vectors stayed valid): under a real 512 MB cap, import went from about two minutes to 1.87 seconds and peak memory from 438 MiB to 259 MiB (once, no log).
 - **A retired model.** Groq retired the model this service named in seven places and calls failed while the health endpoint still said the vector database was connected. The model is now one setting, `GROQ_MODEL`.
 
 Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
@@ -62,7 +62,7 @@ python eval/mutation_check.py               # break the guarded code one way at 
 
 Hybrid fallbacks in this run: 0.
 
-**Table 2, real model (local run on 2026-10-23).** The embedding model is the repo's default, all-MiniLM-L6-v2 through `HuggingFaceEmbeddings` (torch 2.14.1 CPU, sentence-transformers as installed then, the repo pins 6.1.0, Python 3.13). The fastembed ONNX path printed the same numbers. CI does not repeat this run.
+**Table 2, real model (local run on 2026-10-23).** The embedding model is the repo's default, all-MiniLM-L6-v2 through `HuggingFaceEmbeddings` (torch 2.14.1 CPU, sentence-transformers, the repo pins 6.1.0, Python 3.13). The fastembed ONNX path printed the same numbers. CI does not repeat this run.
 
 | method | category | n | hit@1 | hit@3 | MRR | recall@3 | recall@5 |
 |---|---|---|---|---|---|---|---|
@@ -106,12 +106,12 @@ The diagram and the ingestion and query flow are in [docs/SYSTEM-KNOWLEDGE.md](d
 
 ## Run it
 
-You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 model, so allow a few minutes. The commands use `llama3`; the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
+You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 model,. The commands use `llama3`; the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
 
 ```bash
 docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant && ollama pull llama3
 cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt   # Windows Git Bash: venv/Scripts/activate
-QDRANT_URL=http://localhost:6333 python -m app.main            # http://localhost:8001, docs at /docs; this keeps running, so use a second terminal for the next line
+QDRANT_URL=http://localhost:6333 python -m app.main            # http://localhost:8001, docs at /docs; keeps running, use another terminal
 cd frontend && npm install && echo "NEXT_PUBLIC_API_URL=http://localhost:8001/api" > .env.local && npm run dev
 ```
 
@@ -127,7 +127,7 @@ pip install -r requirements-mcp.txt                  # the MCP server tests need
 python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 ```
 
-None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test compares the corpus, question and table counts the docs state with a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
+None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test checks the corpus, question and table counts against a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
 
 ## Limits and not done
 
