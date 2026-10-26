@@ -64,7 +64,7 @@ The README has the three pytest commands. None of them needs a running service, 
 
 ## CI
 
-Timing from the first run on a cold pip cache, read from the job log (run 39863561524, 2026-10-22): install 31 seconds, whole job 146 seconds, against a 15 minute timeout.
+Timing from the first run on a cold pip cache, read from the job log (run 39863561524, 2026-10-22): install 31 seconds, whole job 146 seconds, against a 15 minute timeout. That run predates the MCP tests and their mutants; the current job takes about 5 minutes.
 
 The `python-backend` job runs on every push and installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
 

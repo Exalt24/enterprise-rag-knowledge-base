@@ -23,7 +23,7 @@ The first deployment crash-looped on Render's 512 MB free instance, and from out
 4. **torch arrived through a library I never imported.** `langchain_groq` pulls `langchain_core`, which does an optional `from transformers import GPT2TokenizerFast` for token counting, and `transformers` imports torch. Nothing in the request path needs it. I tried the CPU wheel (191.8 MB) and a one-thread pin, and neither was enough.
 5. **The fix: no torch at all.** The deployed image uses fastembed, which runs the same all-MiniLM-L6-v2 weights through ONNX Runtime, so the 384-dimension vectors already in Qdrant stay valid and nothing was re-indexed. `transformers` is simply not installed, `langchain_core` skips the optional import, and `langchain_groq` still works. See `backend/requirements-render.txt`, which explains the whole chain in comments.
 
-Measured in the built image under a real 512 MB cap, before and after: import time about two minutes down to 1.87 seconds, peak memory 438 MiB down to 259 MiB, and `/api/health` answering 200 in 0.14 seconds. Before the change the platform OOM-killed it.
+Measured in the built image under a real 512 MB cap, before and after: import time about two minutes down to 1.87 seconds, peak memory 438 MiB down to 259 MiB, and `/api/health` answering 200 in 0.14 seconds (measured once on 2026-09-07, output not kept). Before the change the platform OOM-killed it.
 
 Two smaller ones from the same week. The first ONNX adapter did not subclass LangChain's `Embeddings`, and `QdrantVectorStore` type-checks that argument, so on the deployment Qdrant connected, the collection was created, and then the store refused to build and every retrieval returned 503 under a startup log that read as healthy. The backend choice also first keyed off whether `langchain_huggingface` would import, which picked the wrong branch, because that package is installed in the image while torch is not. It now keys off torch.
 
@@ -70,7 +70,7 @@ python backend/tests/eval_retrieval.py --base-url https://enterprise-rag-api.onr
 
 ### Cache
 
-Two identical `POST /api/query` calls with a question that had not been asked before, timed with curl from my machine on 2026-10-07: 2.7 seconds for the first, 0.28 seconds for the second (a Redis hit). Both include network time.
+Historical, the hosted API is offline now so the command below returns nothing. Two identical `POST /api/query` calls with a question that had not been asked before, timed with curl from my machine on 2026-10-07 (output not kept): 2.7 seconds for the first, 0.28 seconds for the second (a Redis hit). Both include network time.
 
 ```bash
 curl -s -o /dev/null -w "%{time_total}s\n" -X POST https://enterprise-rag-api.onrender.com/api/query \

@@ -7,7 +7,7 @@ Moved out of the README: run steps, API examples, deployment and environment var
 ### Prerequisites
 
 - Python 3.13+
-- Node.js 18+
+- Node.js 20.9+
 - Docker, to run Qdrant locally (or a Qdrant Cloud cluster, the free tier works)
 - Ollama ([download](https://ollama.ai/download)) for local generation, or a Groq API key
 - Redis (optional, for caching and rate limiting)
