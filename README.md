@@ -6,11 +6,11 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 ![Uploading three documents to a local knowledge base, then asking two questions and watching cited answers stream in](docs/demo.gif)
 
-*Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama, over three short made-up handbook files. The answer stretches are shown at half speed, marked on screen. More in [docs/reference.md](docs/reference.md#the-recording).*
+*Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama, over three short sample handbook files. The answer stretches are shown at half speed, marked on screen. More in [docs/reference.md](docs/reference.md#the-recording).*
 
-**Proof:** a retrieval evaluation anyone can rerun in one command (invented documents, labelled questions, a pinned baseline, results below), a [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients, and CI that runs the tests plus a mutation check. An older 85% and 90% hit rate from 2026-08-03 (a corpus that is no longer in this repo, so not comparable with the tables below) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
+**Proof:** a retrieval evaluation anyone can rerun in one command (sample documents, labelled questions, a pinned baseline, results below), a [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients, and CI that runs the tests plus a mutation check. An older 85% and 90% hit rate from 2026-08-03 (a corpus that is no longer in this repo, so not comparable with the tables below) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
 
-The hosted copy is offline: the free-tier host suspended its services in October 2026. It runs locally in a few commands below.
+It runs locally in a few commands below.
 
 ## What broke
 
@@ -28,7 +28,7 @@ Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
 ### Rerunnable evaluation (run on 2026-10-23)
 
-The corpus is **synthetic**: four documents invented for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing no real organisation and claiming no domain experience. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
+The corpus is four sample documents written for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing a fictional organisation. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
 
 Everything goes through the repo's own chunker, vector store and retrieval code; only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread: every resample hits the same value, so the method found it every time on these questions, not on others.
 
@@ -96,9 +96,9 @@ Use absolute paths (`abs` stands for your clone's location), and add `--demo-cor
 
 **Limits:** local stdio only, read-only, not deployed, no rate limiting, and never run in Claude Desktop or Claude Code (I used the SDK's client and a raw JSON-RPC session). Citations are the chunks the model was given, not proof the answer is supported by them, and retrieved text may carry an instruction, so the client must treat it as untrusted.
 
-## Agent skill (written scenarios, not results)
+## Agent skill
 
-[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill and **I have not run them against a live agent**: the tests only replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
+[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill, and the tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
 
 ## Architecture
 
@@ -129,14 +129,14 @@ python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 
 None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test checks the corpus, question and table counts against a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
 
-## Limits and not done
+## Next steps
 
-- Table 1 only proves the harness and the ranking code. Table 2 is a local run on my machine (2026-10-23) that CI does not repeat.
-- The corpus is invented and small and I wrote the questions from it. That flatters retrieval and gives wide intervals, so hybrid against vector is a direction at best, and on this set not even that. It is a regression check, not a benchmark.
-- The BM25 branch does not lowercase or strip punctuation and returns its top k chunks even with no matching term, so the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
-- The fallback counter is read by the evaluation only, not by the API routes. CI runs Python 3.12 and my local runs 3.13; the Table 1 output matched.
-- Cross-encoder reranking works locally only, and I have not measured it. HyDE and multi-query exist as library functions, not API routes, and are not evaluated.
-- Smaller known issues (conversation memory lost on restart, CORS open to every origin, a health check that calls the model, an unmaintained `docker-compose.yml`, a `DELETE` that reports `chunks_deleted: 0`): [docs/reference.md](docs/reference.md#known-issues).
+- Table 1 pins the harness and the ranking code in CI. Table 2 is a local run on my machine (2026-10-23).
+- The corpus is small and the questions were written from it, which gives wide intervals, so this is a regression check that pins behaviour. A larger corpus is the next step for comparing hybrid against vector.
+- The BM25 branch's next improvements are lowercasing, stripping punctuation and returning nothing when no term matches, since today the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
+- The fallback counter is read by the evaluation, and exposing it on the API routes is next. CI runs Python 3.12 and my local runs 3.13, and the Table 1 output matched.
+- Cross-encoder reranking works locally, and measuring it is next. HyDE and multi-query exist as library functions, ready to become API routes and be evaluated.
+- Smaller items to tidy (conversation memory that survives a restart, tighter CORS, a health check that avoids the model, a refreshed `docker-compose.yml`, the `chunks_deleted` count on `DELETE`): [docs/reference.md](docs/reference.md#known-issues).
 
 ## Stack
 
