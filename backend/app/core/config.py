@@ -61,6 +61,56 @@ class Settings(BaseSettings):
             "so the next retirement is an env change, not a deploy."
         ),
     )
+    # Which language model answers first
+    llm_provider: str = Field(
+        default="auto",
+        description=(
+            "Which provider is tried first: auto, ollama, groq or vertex. auto keeps the original "
+            "order (Ollama, then Groq, then Vertex AI if it is configured). Any other value moves "
+            "that provider to the front and keeps the rest, in the same order, as fallbacks."
+        ),
+    )
+
+    # Vertex AI (Gemini) configuration. The tier exists only when a service account is configured.
+    vertex_credentials_file: Optional[str] = Field(
+        default=None,
+        description="Path to a Google Cloud service account key JSON file (VERTEX_CREDENTIALS_FILE)",
+    )
+    vertex_credentials_json: Optional[str] = Field(
+        default=None,
+        description="The same key as inline JSON, for a container with no file (VERTEX_CREDENTIALS_JSON)",
+    )
+    vertex_project: Optional[str] = Field(
+        default=None,
+        description="Google Cloud project id. Falls back to project_id in the service account key.",
+    )
+    vertex_location: str = Field(
+        default="us-central1",
+        description="Vertex AI region, or global",
+    )
+    vertex_model: str = Field(
+        default="gemini-3.5-flash",
+        description=(
+            "Gemini model id. A SETTING for the same reason groq_model is: models get retired, "
+            "and the next retirement should be an env change."
+        ),
+    )
+    vertex_api_base: Optional[str] = Field(
+        default=None,
+        description="Override the service endpoint (the tests point it at a stand-in server)",
+    )
+    vertex_safety_threshold: Optional[str] = Field(
+        default=None,
+        description=(
+            "One block threshold applied to all four harm categories, for example BLOCK_ONLY_HIGH. "
+            "Unset leaves the model's own defaults."
+        ),
+    )
+    vertex_system_instruction: Optional[str] = Field(
+        default=None,
+        description="Optional systemInstruction text sent with every Vertex request",
+    )
+
     # Qdrant Cloud Vector Database
     qdrant_url: str = Field(
         default="",
@@ -163,6 +213,8 @@ def print_config():
     print(f"Chunk Overlap: {settings.chunk_overlap} tokens")
     print(f"Retrieval Top-K: {settings.retrieval_top_k}")
     print(f"Groq API: {'Configured' if settings.groq_api_key else 'Not set'}")
+    print(f"Vertex AI: {'Configured' if (settings.vertex_credentials_file or settings.vertex_credentials_json) else 'Not set'}")
+    print(f"LLM provider order: {settings.llm_provider}")
     print(f"Redis Cache: {'Configured' if settings.redis_url else 'Not set (using in-memory)'}")
     print("=" * 70)
 

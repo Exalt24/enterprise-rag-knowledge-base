@@ -1,9 +1,10 @@
 """
 Generation Service with LLM Fallback
 
-2-Tier LLM Strategy:
+Tiered LLM Strategy (order set by LLM_PROVIDER, "auto" being the order below):
 1. Ollama (local, unlimited) - Primary
 2. Groq (350+ tokens/sec, free tier) - Fallback for speed
+3. Vertex AI Gemini - used when a service account is configured (see app/services/vertex.py)
 
 Benefits:
 - Speed: Groq is 10-30x faster than local Ollama for demos
@@ -27,6 +28,7 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
+from app.services.vertex import build_vertex_llm
 
 
 class GenerationResponse(BaseModel):
@@ -78,10 +80,18 @@ class GenerationService:
                 temperature=0.1
             ) if settings.groq_api_key else None
 
+        # Vertex AI exists only when a service account is configured; a broken configuration is reported
+        # and the tier is left out, so one bad setting cannot stop the other providers from starting.
+        try:
+            self.vertex = build_vertex_llm(settings)
+        except Exception as e:
+            print(f"[!] Vertex AI is configured but could not start: {e}")
+            self.vertex = None
+
         print(f"[OK] LLMs ready!")
-        print(f"  - Ollama: {settings.ollama_model} (primary)" if self.ollama else "  - Groq: llama-3.3-70b (primary)")
-        if self.groq and self.ollama:
-            print(f"  - Groq: Configured (fallback)")
+        tiers = self._tiers()
+        for position, (_, name) in enumerate(tiers):
+            print(f"  - {name} ({'primary' if position == 0 else 'fallback'})")
 
         # Define RAG prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
@@ -100,6 +110,28 @@ Question: {question}
 
 Answer:""")
 
+    def _tiers(self):
+        """
+        The configured providers as (llm, label) pairs, in the order they are tried.
+
+        LLM_PROVIDER=auto keeps the original order (Ollama, Groq, Vertex AI). Naming a provider moves it
+        to the front and the others follow in the same order as fallbacks. A provider that is not
+        configured is simply absent, so naming one that is missing falls back to the rest.
+        """
+        available = {}
+        if self.ollama:
+            available["ollama"] = (self.ollama, f"ollama/{settings.ollama_model}")
+        if self.groq:
+            available["groq"] = (self.groq, f"groq/{settings.groq_model}")
+        if self.vertex:
+            available["vertex"] = (self.vertex, f"vertex/{settings.vertex_model}")
+        order = ["ollama", "groq", "vertex"]
+        wanted = (settings.llm_provider or "auto").strip().lower()
+        if wanted in order:
+            order.remove(wanted)
+            order.insert(0, wanted)
+        return [available[name] for name in order if name in available]
+
     @property
     def primary_llm(self):
         """
@@ -109,16 +141,14 @@ Answer:""")
         .ollama directly. On Render .ollama is None, so a hardcoded .ollama reference
         builds a broken chain and fails at invoke time.
         """
-        return self.ollama or self.groq
+        tiers = self._tiers()
+        return tiers[0][0] if tiers else None
 
     @property
     def primary_model_name(self) -> str:
         """Label of the provider that answers first, so reporting matches reality."""
-        if self.ollama:
-            return f"ollama/{settings.ollama_model}"
-        if self.groq:
-            return f"groq/{settings.groq_model}"
-        return "none"
+        tiers = self._tiers()
+        return tiers[0][1] if tiers else "none"
 
     def _generate_with_llm(self, llm, llm_name: str, query: str, context: str) -> Optional[GenerationResponse]:
         """
@@ -171,13 +201,7 @@ Answer:""")
         knows which model answered before the first token reaches the client, which matters
         for the OpenAI-compatible payload where `model` sits in the very first SSE frame.
         """
-        tiers = []
-        if self.ollama:
-            tiers.append((self.ollama, f"ollama/{settings.ollama_model}"))
-        if self.groq:
-            tiers.append((self.groq, f"groq/{settings.groq_model}"))
-
-        for llm, llm_name in tiers:
+        for llm, llm_name in self._tiers():
             try:
                 stream = self._stream_with_llm(llm, llm_name, query, context)
                 first = next(stream)  # forces the provider call, so failures surface here
@@ -205,9 +229,10 @@ Answer:""")
         context: str
     ) -> GenerationResponse:
         """
-        Generate answer with 2-tier LLM fallback.
+        Generate answer with tiered LLM fallback.
 
-        Tries: Ollama → Groq (or just Groq on Render)
+        Tries the providers in LLM_PROVIDER order (auto: Ollama, Groq, Vertex AI; only Groq and
+        Vertex AI on Render)
 
         Args:
             query: User question
@@ -217,33 +242,11 @@ Answer:""")
             GenerationResponse with answer and metadata
         """
 
-        # TIER 1: Try Ollama (local) or Groq (Render)
-        if self.ollama:
-            # Local development - use Ollama
-            response = self._generate_with_llm(
-                self.ollama,
-                f"ollama/{settings.ollama_model}",
-                query,
-                context
-            )
-            if response:
-                return response
-
-        # TIER 2: Try Groq (fallback for local, primary for Render)
-        if self.groq:
-            if not self.ollama:
-                # Groq is primary on Render
-                pass
-            else:
-                print("[i] Ollama unavailable, trying Groq...")
-
-            response = self._generate_with_llm(
-                self.groq,
-                f"groq/{settings.groq_model}",
-                query,
-                context
-            )
-
+        # Try each configured provider in order; the first that answers wins.
+        for position, (llm, llm_name) in enumerate(self._tiers()):
+            if position > 0:
+                print(f"[i] Previous provider unavailable, trying {llm_name}...")
+            response = self._generate_with_llm(llm, llm_name, query, context)
             if response:
                 return response
 

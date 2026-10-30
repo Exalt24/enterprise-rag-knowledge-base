@@ -8,9 +8,7 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 *Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama, over three short sample handbook files. The answer stretches are shown at half speed, marked on screen. More in [docs/reference.md](docs/reference.md#the-recording).*
 
-**Proof:** a retrieval evaluation anyone can rerun in one command (sample documents, labelled questions, a pinned baseline, results below), a [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients, and CI that runs the tests plus a mutation check. An older 85% and 90% hit rate from 2026-08-03 (a corpus that is no longer in this repo, so not comparable with the tables below) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
-
-It runs locally in a few commands below.
+**Proof:** a retrieval evaluation anyone can rerun in one command, a [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients, and CI that runs the tests plus a mutation check. An older 85% and 90% hit rate (2026-08-03, a corpus no longer in this repo) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
 
 ## What broke
 
@@ -28,7 +26,7 @@ Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
 ### Rerunnable evaluation (run on 2026-10-23)
 
-The corpus is four sample documents written for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing a fictional organisation. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
+The corpus is four documents written as samples for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing a fictional organisation. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
 
 Everything goes through the repo's own chunker, vector store and retrieval code; only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread: every resample hits the same value, so the method found it every time on these questions, not on others.
 
@@ -100,13 +98,19 @@ Use absolute paths (`abs` stands for your clone's location), and add `--demo-cor
 
 [`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill, and the tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
 
+## Vertex AI Gemini provider
+
+`LLM_PROVIDER=vertex` plus `VERTEX_CREDENTIALS_FILE` makes a Gemini model on Vertex AI answer first, with Ollama and Groq behind it. [`vertex.py`](backend/app/services/vertex.py) signs the RS256 assertion, caches the access token, calls `generateContent` and `streamGenerateContent`, retries 429 and 5xx and honours `Retry-After`, and raises a named error for a 4xx or blocked reply.
+
+**Built and tested against a stand-in server** I wrote from the Google pages saved in [`docs/vendor-contract/vertex-ai/`](docs/vendor-contract/vertex-ai/README.md): its tests and a guard-removal check run in CI ([details and run output](docs/vertex-provider.md)).
+
 ## Architecture
 
 The diagram and the ingestion and query flow are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. The streaming and OpenAI-compatible endpoints are in [docs/reference.md](docs/reference.md).
 
 ## Run it
 
-You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 model,. The commands use `llama3`; the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
+You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 model. The commands use `llama3`; the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
 
 ```bash
 docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant && ollama pull llama3
@@ -131,16 +135,16 @@ None of these needs a running service, a model download, a key or a network; run
 
 ## Next steps
 
-- Table 1 pins the harness and the ranking code in CI. Table 2 is a local run on my machine (2026-10-23).
+- Table 1 pins the harness and the ranking code in CI. Table 2 is a local run (2026-10-23).
 - The corpus is small and the questions were written from it, which gives wide intervals, so this is a regression check that pins behaviour. A larger corpus is the next step for comparing hybrid against vector.
-- The BM25 branch's next improvements are lowercasing, stripping punctuation and returning nothing when no term matches, since today the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
-- The fallback counter is read by the evaluation, and exposing it on the API routes is next. CI runs Python 3.12 and my local runs 3.13, and the Table 1 output matched.
+- BM25 next: lowercasing, stripping punctuation and returning nothing when no term matches, since the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
+- The fallback counter is read by the evaluation, and exposing it on the API routes is next.
 - Cross-encoder reranking works locally, and measuring it is next. HyDE and multi-query exist as library functions, ready to become API routes and be evaluated.
-- Smaller items to tidy (conversation memory that survives a restart, tighter CORS, a health check that avoids the model, a refreshed `docker-compose.yml`, the `chunks_deleted` count on `DELETE`): [docs/reference.md](docs/reference.md#known-issues).
+- Smaller items to tidy are listed in [docs/reference.md](docs/reference.md#known-issues).
 
 ## Stack
 
-Python 3.13, FastAPI, LangChain, LangGraph, Qdrant, Redis, fastembed or sentence-transformers (all-MiniLM-L6-v2), rank-bm25, Groq, Ollama, Next.js 16, React 19, TypeScript, Tailwind CSS.
+Python 3.13, FastAPI, LangChain, LangGraph, Qdrant, Redis, fastembed or sentence-transformers (all-MiniLM-L6-v2), rank-bm25, Groq, Ollama, Vertex AI, Next.js 16, React 19, TypeScript, Tailwind CSS.
 
 ## License
 

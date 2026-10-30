@@ -214,7 +214,8 @@ enterprise-rag-knowledge-base/
 │   │   │   ├── vector_store.py        # Qdrant client
 │   │   │   ├── retrieval.py           # vector retrieval
 │   │   │   ├── advanced_retrieval.py  # hybrid, HyDE, multi-query, reranking
-│   │   │   ├── generation.py          # Groq / Ollama
+│   │   │   ├── generation.py          # Groq / Ollama / Vertex AI tiers
+│   │   │   ├── vertex.py              # Vertex AI Gemini provider: signed assertion, token cache, retries, streaming
 │   │   │   ├── rag.py                 # orchestration
 │   │   │   ├── cache.py               # Redis and in-memory cache
 │   │   │   ├── conversation.py        # multi-turn memory
@@ -306,6 +307,14 @@ OLLAMA_REASONING=false             # unset by default; false stops a reasoning m
 QDRANT_COLLECTION=enterprise_rag   # collection name
 GROQ_API_KEY=gsk_...               # cloud generation, required on Render
 GROQ_MODEL=openai/gpt-oss-120b     # change this when Groq retires a model
+LLM_PROVIDER=auto                  # auto, ollama, groq or vertex: which provider answers first; the rest stay as fallbacks
+VERTEX_CREDENTIALS_FILE=/path/key.json  # Google Cloud service account key; VERTEX_CREDENTIALS_JSON takes the JSON inline
+VERTEX_PROJECT=my-project          # defaults to project_id in the key
+VERTEX_LOCATION=us-central1        # or global
+VERTEX_MODEL=gemini-3.5-flash      # change this when Google retires a model
+VERTEX_SAFETY_THRESHOLD=BLOCK_ONLY_HIGH  # one threshold for all four harm categories; unset keeps the model defaults
+VERTEX_SYSTEM_INSTRUCTION=...      # optional systemInstruction text
+VERTEX_API_BASE=http://127.0.0.1:8765   # override the service endpoint, for a stand-in server
 REDIS_URL=redis://localhost:6379   # cache and rate limiter
 CACHE_TTL=3600                     # cache lifetime in seconds
 MAX_FILE_SIZE_MB=10                # upload limit

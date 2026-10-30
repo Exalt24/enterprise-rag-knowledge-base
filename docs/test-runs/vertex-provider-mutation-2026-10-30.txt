@@ -1,0 +1,46 @@
+# Vertex AI provider mutation check, run 2026-10-30
+# command: cd backend && python eval/vertex_mutation_check.py
+# each line removes or breaks one guard in a copy of app/ and runs tests/test_vertex_provider.py; CAUGHT means a test failed
+
+CAUGHT    retry-429-removed                  a 429 is retried                                           -> tests/test_vertex_provider.py::test_a_429_is_retried_after_the_retry_after_and_then_succeeds
+CAUGHT    retry-5xx-removed                  a 5xx is retried                                           -> tests/test_vertex_provider.py::test_a_5xx_is_retried_with_a_doubling_delay
+CAUGHT    retry-403-added                    a 4xx other than 429 is never retried                      -> tests/test_vertex_provider.py::test_a_403_is_refused_at_once_with_the_reason_and_is_not_retried
+CAUGHT    retry-after-ignored                Retry-After is honoured                                    -> tests/test_vertex_provider.py::test_a_429_is_retried_after_the_retry_after_and_then_succeeds
+CAUGHT    retry-after-header-not-read        the Retry-After header is passed to the delay              -> tests/test_vertex_provider.py::test_a_429_is_retried_after_the_retry_after_and_then_succeeds
+CAUGHT    backoff-flat                       the delay doubles                                          -> tests/test_vertex_provider.py::test_a_5xx_is_retried_with_a_doubling_delay
+CAUGHT    delay-cap-removed                  an absurd Retry-After is capped                            -> tests/test_vertex_provider.py::test_retry_after_accepts_seconds_and_a_date
+CAUGHT    one-retry-too-many                 retries stop at the limit                                  -> tests/test_vertex_provider.py::test_a_retry_that_keeps_failing_gives_up_after_two_retries
+CAUGHT    connection-error-not-retried       a dropped connection is retried then reported              -> tests/test_vertex_provider.py::test_a_dropped_connection_is_retried_then_reported
+CAUGHT    error-status-name-dropped          the 4xx error names Google's status                        -> tests/test_vertex_provider.py::test_a_retry_that_keeps_failing_gives_up_after_two_retries
+CAUGHT    non-200-accepted                   a 4xx from the model raises                                -> tests/test_vertex_provider.py::test_a_token_that_keeps_being_refused_fails_after_one_refresh
+CAUGHT    token-refusal-swallowed            a refused assertion raises an auth error                   -> tests/test_vertex_provider.py::test_an_assertion_signed_with_the_wrong_key_is_refused_with_a_clear_error
+CAUGHT    token-cache-disabled               the token is reused until shortly before expiry            -> tests/test_vertex_provider.py::test_the_token_is_cached_between_calls
+CAUGHT    token-margin-removed               the token is replaced before it expires                    -> tests/test_vertex_provider.py::test_the_token_is_replaced_shortly_before_it_expires_without_waiting_for_a_401
+CAUGHT    token-lifetime-ignored             the cache uses expires_in from the reply                   -> tests/test_vertex_provider.py::test_token_cache_invariants_over_random_worlds[0]
+CAUGHT    failed-mint-clears-cache           a failed mint leaves the old cache alone                   -> tests/test_vertex_provider.py::test_token_cache_invariants_over_random_worlds[1]
+CAUGHT    refresh-on-401-removed             an expired token is refreshed                              -> tests/test_vertex_provider.py::test_an_expired_token_is_refreshed_once_and_the_call_succeeds
+CAUGHT    refresh-not-bounded                the refresh happens once                                   -> tests/test_vertex_provider.py::test_a_token_that_keeps_being_refused_fails_after_one_refresh
+CAUGHT    stale-token-kept-after-401         the refused token is dropped                               -> tests/test_vertex_provider.py::test_an_expired_token_is_refreshed_once_and_the_call_succeeds
+CAUGHT    assertion-wrong-audience           aud names the token endpoint                               -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    assertion-lifetime-too-long        exp is at most one hour after iat                          -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    assertion-wrong-hash               the signature is RSA SHA-256                               -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    wrong-grant-type                   the JWT bearer grant type                                  -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    bearer-header-removed              every call carries the token                               -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    system-instruction-dropped         systemInstruction is sent                                  -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    generation-config-dropped          generationConfig is sent                                   -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    safety-settings-dropped            safetySettings are sent                                    -> tests/test_vertex_provider.py::test_a_normal_answer_is_mapped_and_the_request_has_the_documented_shape
+CAUGHT    stop-sequences-dropped             stop sequences reach the request                           -> tests/test_vertex_provider.py::test_stop_sequences_reach_the_request
+CAUGHT    stream-uses-the-wrong-method       streaming calls streamGenerateContent                      -> tests/test_vertex_provider.py::test_a_streamed_answer_arrives_in_pieces_and_joins_to_the_answer[array]
+CAUGHT    prompt-block-ignored               a blocked prompt raises                                    -> tests/test_vertex_provider.py::test_a_blocked_prompt_raises_a_blocked_error_naming_the_prompt
+CAUGHT    blocked-finish-reason-accepted     a finish reason other than STOP raises                     -> tests/test_vertex_provider.py::test_a_stream_blocked_midway_raises_after_the_text_that_arrived
+CAUGHT    max-tokens-treated-as-error        a truncated answer is still an answer                      -> tests/test_vertex_provider.py::test_max_tokens_is_a_truncated_answer_not_an_error
+CAUGHT    finish-prefix-not-stripped         FINISH_REASON_ names are normalised                        -> tests/test_vertex_provider.py::test_finish_reason_names_are_normalised
+CAUGHT    no-candidates-accepted             an empty reply raises                                      -> tests/test_vertex_provider.py::test_a_reply_with_no_candidates_is_a_response_error
+CAUGHT    thought-parts-included             thought summaries stay out of the answer                   -> tests/test_vertex_provider.py::test_thought_parts_are_not_part_of_the_answer
+CAUGHT    malformed-chunk-swallowed          a chunk that is not JSON raises                            -> tests/test_vertex_provider.py::test_a_streamed_chunk_that_is_not_json_raises_after_the_good_chunks
+CAUGHT    stream-without-finish-accepted     a stream with no finish reason raises                      -> tests/test_vertex_provider.py::test_a_stream_with_no_finish_reason_raises
+CAUGHT    unclosed-array-accepted            a stream cut off before the closing bracket raises         -> tests/test_vertex_provider.py::test_a_stream_cut_off_before_the_closing_bracket_raises
+CAUGHT    provider-setting-ignored           the provider setting moves a tier to the front             -> tests/test_vertex_provider.py::test_the_provider_setting_orders_the_tiers[vertex-expected1]
+
+39 of 39 mutants caught, 0 not
+exit code: 0

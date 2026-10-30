@@ -63,6 +63,13 @@ jobs:
       # a language model key. Its own invocation, like the others.
       - name: MCP server and skill tests
         run: python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
+      # The Vertex AI provider against a stand-in server written from the saved Google pages (docs/vendor-contract/vertex-ai/):
+      # request shape, signed assertion, token cache and refresh, retries, blocked replies, streaming. Needs no key and no
+      # network. Then the same tests run against copies of the code with one guard removed at a time; every copy must fail.
+      - name: Vertex AI provider tests
+        run: python -m pytest tests/test_vertex_provider.py
+      - name: Vertex AI provider mutation check
+        run: python eval/vertex_mutation_check.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       - name: Mutation check

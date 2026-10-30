@@ -1,0 +1,445 @@
+URL: https://cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent
+STATUS: 200
+
+Skip to main content
+Documentation
+/
+Console
+Sign in
+Gemini Enterprise Agent Platform
+Start free
+Overview
+Studio
+Agents
+Models
+Notebooks
+API reference
+Pricing
+Engineering Blog
+Overview
+Model APIs
+Interactions API
+GenerateContent API
+Live API
+CountTokens API
+Text embeddings API
+Multimodal embeddings API
+Lyria music generation API
+Batch prediction API
+Tuning API
+Gen AI evaluation API
+API errors
+RAG APIs
+RAG API v1
+RAG API v1beta1
+Retrieval and generation output of RAG
+Platform APIs
+Gemini Enterprise Agent Platform
+Client libraries
+gcloud CLI reference
+Agent Platform in express mode
+REST API reference
+All methods
+v1
+REST Resources
+media
+operations
+projects.locations
+projects.locations.batchPredictionJobs
+projects.locations.cachedContents
+projects.locations.customJobs
+projects.locations.datasets
+projects.locations.datasets.annotationSpecs
+projects.locations.datasets.dataItems
+projects.locations.datasets.dataItems.annotations
+projects.locations.datasets.datasetVersions
+projects.locations.datasets.savedQueries
+projects.locations.deploymentResourcePools
+projects.locations.endpoints
+projects.locations.endpoints.responses
+projects.locations.featureGroups
+projects.locations.featureGroups.features
+projects.locations.featureOnlineStores
+projects.locations.featureOnlineStores.featureViews
+projects.locations.featureOnlineStores.featureViews.featureViewSyncs
+projects.locations.featurestores
+projects.locations.featurestores.entityTypes
+projects.locations.featurestores.entityTypes.features
+projects.locations.hyperparameterTuningJobs
+projects.locations.indexEndpoints
+projects.locations.indexes
+projects.locations.metadataStores
+projects.locations.metadataStores.artifacts
+projects.locations.metadataStores.contexts
+projects.locations.metadataStores.executions
+projects.locations.metadataStores.metadataSchemas
+projects.locations.migratableResources
+projects.locations.modelDeploymentMonitoringJobs
+projects.locations.models
+projects.locations.models.evaluations
+projects.locations.models.evaluations.slices
+projects.locations.nasJobs
+projects.locations.nasJobs.nasTrialDetails
+projects.locations.notebookExecutionJobs
+projects.locations.notebookRuntimeTemplates
+projects.locations.notebookRuntimes
+projects.locations.operations
+projects.locations.persistentResources
+projects.locations.pipelineJobs
+projects.locations.publishers.models
+Overview
+computeTokens
+countTokens
+embedContent
+generateContent
+predict
+rawPredict
+serverStreamingPredict
+streamGenerateContent
+streamRawPredict
+projects.locations.publishers.v1.responses
+projects.locations.ragCorpora
+projects.locations.ragCorpora.ragFiles
+projects.locations.reasoningEngines
+projects.locations.reasoningEngines.runtimeRevisions
+projects.locations.reasoningEngines.sandboxEnvironmentSnapshots
+projects.locations.reasoningEngines.sandboxEnvironmentTemplates
+projects.locations.reasoningEngines.sandboxEnvironments
+projects.locations.reasoningEngines.sessions
+projects.locations.reasoningEngines.sessions.events
+projects.locations.schedules
+projects.locations.semanticGovernancePolicies
+projects.locations.semanticGovernancePolicyEngine
+projects.locations.servingProfiles
+projects.locations.specialistPools
+projects.locations.studies
+projects.locations.studies.trials
+projects.locations.tensorboards
+projects.locations.tensorboards.experiments
+projects.locations.tensorboards.experiments.runs
+projects.locations.tensorboards.experiments.runs.timeSeries
+projects.locations.trainingPipelines
+projects.locations.tuningJobs
+publishers.models
+reasoningEngines.v1.projects.locations.reasoningEngines.api
+reasoningEngines.v1.projects.locations.reasoningEngines.runtimeRevisions.api
+reasoningEngines.v1beta1.projects.locations.reasoningEngines.api
+reasoningEngines.v1beta1.projects.locations.reasoningEngines.runtimeRevisions.api
+reasoningEngines.ws.v1.projects.locations.reasoningEngines.api
+reasoningEngines.ws.v1.projects.locations.reasoningEngines.revisions.runtimeRevisions.api
+reasoningEngines.ws.v1beta1.projects.locations.reasoningEngines.api
+reasoningEngines.ws.v1beta1.projects.locations.reasoningEngines.revisions.runtimeRevisions.api
+Types
+Annotation
+ApiKeyConfig
+AssignNotebookRuntimeOperationMetadata
+AutomaticResources
+BatchCreateFeaturesOperationMetadata
+BatchCreateFeaturesResponse
+BatchMigrateResourcesOperationMetadata
+BatchMigrateResourcesResponse
+BatchReadFeatureValuesOperationMetadata
+BatchReadFeatureValuesResponse
+BigQueryDestination
+BigQuerySource
+CheckTrialEarlyStoppingStateMetatdata
+CheckTrialEarlyStoppingStateResponse
+Chunk
+ComputeTokensResponse
+Content
+CopyModelOperationMetadata
+CopyModelResponse
+CountTokensResponse
+CreateDatasetOperationMetadata
+CreateDatasetVersionOperationMetadata
+CreateDeploymentResourcePoolOperationMetadata
+CreateEndpointOperationMetadata
+CreateEntityTypeOperationMetadata
+CreateFeatureGroupOperationMetadata
+CreateFeatureOnlineStoreOperationMetadata
+CreateFeatureOperationMetadata
+CreateFeatureViewOperationMetadata
+CreateFeaturestoreOperationMetadata
+CreateIndexEndpointOperationMetadata
+CreateIndexOperationMetadata
+CreateMetadataStoreOperationMetadata
+CreateNotebookExecutionJobOperationMetadata
+CreateNotebookRuntimeTemplateOperationMetadata
+CreatePersistentResourceOperationMetadata
+CreateRegistryFeatureOperationMetadata
+CreateServingProfileOperationMetadata
+CreateSpecialistPoolOperationMetadata
+CreateTensorboardOperationMetadata
+CsvSource
+DataItem
+DedicatedResources
+DeleteFeatureValuesOperationMetadata
+DeleteFeatureValuesResponse
+DeleteMetadataStoreOperationMetadata
+DeleteOperationMetadata
+DeployIndexOperationMetadata
+DeployIndexResponse
+DeployModelOperationMetadata
+DeployModelResponse
+DeployOperationMetadata
+DeployResponse
+DeploymentStage
+DestinationFeatureSetting
+EncryptionSpec
+Event
+Explanation
+ExplanationSpec
+ExportDataOperationMetadata
+ExportDataResponse
+ExportFeatureValuesOperationMetadata
+ExportFeatureValuesResponse
+ExportModelOperationMetadata
+ExportModelResponse
+Fact
+FeatureSelector
+FeatureValue
+FeatureValueDestination
+FeatureViewDataKey
+FetchFeatureValuesResponse
+GcsSource
+GenerateContentResponse
+GenerateVideoResponse
+GenericOperationMetadata
+GroundingMetadata
+HarmBlockThreshold
+HarmCategory
+ImportDataOperationMetadata
+ImportDataResponse
+ImportFeatureValuesOperationMetadata
+ImportFeatureValuesResponse
+JobState
+LineageSubgraph
+ListFeaturesResponse
+Measurement
+ModalityTokenCount
+ModelArmorConfig
+ModelContainerSpec
+ModelExplanation
+MutateDeployedIndexOperationMetadata
+MutateDeployedIndexResponse
+MutateDeployedModelOperationMetadata
+MutateDeployedModelResponse
+NasTrial
+NearestNeighborSearchOperationMetadata
+NetworkSpec
+NotebookEucConfig
+NotebookExecutionJobView
+NotebookIdleShutdownConfig
+NotebookRuntimeType
+NotebookSoftwareConfig
+PSCAutomationConfig
+PersistentDiskSpec
+PipelineState
+PredictResponse
+PredictSchemata
+PrivateServiceConnectConfig
+PurgeArtifactsMetadata
+PurgeArtifactsResponse
+PurgeContextsMetadata
+PurgeContextsResponse
+PurgeExecutionsMetadata
+PurgeExecutionsResponse
+QueryReasoningEngineResponse
+RagChunk
+RagContexts
+RagEngineConfig
+RagFileTransformationConfig
+RagQuery
+ReadFeatureValuesResponse
+RebootPersistentResourceOperationMetadata
+RecordErrorType
+RestoreDatasetVersionOperationMetadata
+SafetySetting
+Schema
+SemanticGovernancePolicyEngine
+SessionEvent
+ShieldedVmConfig
+StartNotebookRuntimeOperationMetadata
+StreamingPredictResponse
+SuggestTrialsMetadata
+SuggestTrialsResponse
+Tensor
+TensorboardBlob
+TimeSeriesData
+TimeSeriesDataPoint
+UndeployIndexOperationMetadata
+UndeployIndexResponse
+UndeployModelOperationMetadata
+UndeployModelResponse
+UpdateDeploymentResourcePoolOperationMetadata
+UpdateExplanationDatasetOperationMetadata
+UpdateExplanationDatasetResponse
+UpdateFeatureGroupOperationMetadata
+UpdateFeatureOnlineStoreOperationMetadata
+UpdateFeatureOperationMetadata
+UpdateFeatureViewOperationMetadata
+UpdateFeaturestoreOperationMetadata
+UpdateIndexOperationMetadata
+UpdateModelDeploymentMonitoringJobOperationMetadata
+UpdatePersistentResourceOperationMetadata
+UpdateSpecialistPoolOperationMetadata
+UpdateTensorboardOperationMetadata
+UpgradeNotebookRuntimeOperationMetadata
+UploadModelOperationMetadata
+UploadModelResponse
+v1beta1
+Shared types
+RPC API reference
+Long-running operations
+MCP reference
+Google Cloud Pipelines Components reference
+Neural Architecture Search reference
+Agent Retrieval
+Agent Gateway
+Agent Platform Workbench
+Home
+Documentation
+AI and ML
+Gemini Enterprise Agent Platform
+API reference
+Was this helpful?
+Send feedback
+Method: models.generateContent
+On this page
+Endpoint
+Path parameters
+Request body
+Response body
+IAM Permissions
+
+Full name: projects.locations.publishers.models.generateContent
+
+Generate content with multimodal inputs.
+
+Endpoint
+POST
+https://{service-endpoint}/v1/{model}:generateContent
+
+
+
+Where {service-endpoint} is one of the supported service endpoints.
+
+Path parameters
+model
+string
+
+Required. The fully qualified name of the publisher model or tuned model endpoint to use.
+
+Publisher model format: projects/{project}/locations/{location}/publishers/*/models/*
+
+Tuned model endpoint format: projects/{project}/locations/{location}/endpoints/{endpoint}
+
+Request body
+
+The request body contains data with the following structure:
+
+Fields
+contents[]
+object (Content)
+
+Required. The content of the current conversation with the model.
+
+For single-turn queries, this is a single instance. For multi-turn queries, this is a repeated field that contains conversation history + latest request.
+
+cachedContent
+string
+
+Optional. The name of the cached content used as context to serve the prediction. Note: only used in explicit caching, where users can have control over caching (e.g. what content to cache) and enjoy guaranteed cost savings. Format: projects/{project}/locations/{location}/cachedContents/{cachedContent}
+
+tools[]
+object (Tool)
+
+Optional. A list of Tools the model may use to generate the next response.
+
+A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.
+
+toolConfig
+object (ToolConfig)
+
+Optional. Tool config. This config is shared for all tools provided in the request.
+
+labels
+map (key: string, value: string)
+
+Optional. The labels with user-defined metadata for the request. It is used for billing and reporting only.
+
+label keys and values can be no longer than 63 characters (Unicode codepoints) and can only contain lowercase letters, numeric characters, underscores, and dashes. International characters are allowed. label values are optional. label keys must start with a letter.
+
+safetySettings[]
+object (SafetySetting)
+
+Optional. Per request settings for blocking unsafe content. Enforced on GenerateContentResponse.candidates.
+
+modelArmorConfig
+object (ModelArmorConfig)
+
+Optional. Settings for prompt and response sanitization using the Model Armor service. If supplied, safetySettings must not be supplied.
+
+generationConfig
+object (GenerationConfig)
+
+Optional. Generation config.
+
+systemInstruction
+object (Content)
+
+Optional. The user provided system instructions for the model. Note: only text should be used in parts and content in each part will be in a separate paragraph.
+
+Response body
+
+If successful, the response body contains an instance of GenerateContentResponse.
+
+IAM Permissions
+
+Requires the following IAM permission on the model resource:
+
+aiplatform.endpoints.predict
+
+For more information, see the IAM documentation.
+
+Was this helpful?
+Send feedback
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-10-22 UTC.
+
+Products and pricing
+See all products
+Google Cloud pricing
+Google Cloud Marketplace
+Contact sales
+Support
+Community forums
+Support
+Release Notes
+System status
+Resources
+GitHub
+Getting Started with Google Cloud
+Code samples
+Cloud Architecture Center
+Training and Certification
+Builders Hub
+Engage
+Blog
+Events
+X (Twitter)
+Google Cloud on YouTube
+Google Cloud Tech on YouTube
+Android
+Chrome
+Firebase
+Google AI
+About Google
+Privacy
+Site terms
+Google Cloud terms
+Our third decade of climate action: join us
+Sign up for the Google Cloud newsletter
+Subscribe

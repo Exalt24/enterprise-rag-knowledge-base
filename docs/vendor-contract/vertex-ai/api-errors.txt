@@ -1,0 +1,134 @@
+URL: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors
+STATUS: 200
+
+Skip to main content
+Documentation
+/
+Console
+Sign in
+Gemini Enterprise Agent Platform
+Start free
+Overview
+Studio
+Agents
+Models
+Notebooks
+API reference
+Pricing
+Engineering Blog
+Overview
+Model APIs
+Interactions API
+GenerateContent API
+Live API
+CountTokens API
+Text embeddings API
+Multimodal embeddings API
+Lyria music generation API
+Batch prediction API
+Tuning API
+Gen AI evaluation API
+API errors
+RAG APIs
+RAG API v1
+RAG API v1beta1
+Retrieval and generation output of RAG
+Platform APIs
+Gemini Enterprise Agent Platform
+Agent Retrieval
+Agent Gateway
+Agent Platform Workbench
+On this page
+API errors
+Handle errors
+What's next
+Home
+Documentation
+AI and ML
+Gemini Enterprise Agent Platform
+API reference
+Was this helpful?
+Send feedback
+API errors
+
+This guide provides a list of errors that you might encounter from using generative AI components of the Agent Platform API. The errors follow the error model of the Google Cloud API, which recommends that we provide guidance on the causes and the solutions specific to the generative AI models.
+
+API errors
+
+This table provides API error codes and descriptions.
+
+HTTP error code	Canonical error code	Cause	Example	Solution
+400	INVALID_ARGUMENT / FAILED_PRECONDITION	Request fails API validation, or you tried to access a model that requires allowlisting or is disallowed by the organization's policy.	Request exceeds the model's input token limit.	Review the model-specific limits. See Google models.
+401	UNAUTHENTICATED	Request isn't authenticated due to a missing, invalid, or expired OAuth token.	Request has invalid authentication credentials.	Verify that the Authorization header contains a valid access token. If you're using the Google Cloud CLI, run gcloud auth print-access-token to generate a valid token.
+403	PERMISSION_DENIED	Client doesn't have sufficient permission to call the API.	Service account doesn't have permission to access the Cloud Storage bucket hosting image or video resources.	1. Verify that all necessary APIs are enabled, and the service account has the right permission to access the selected Agent Platform service. See Access control.
+
+2. Agent Platform per-product, per-project service account (P4SA) is granted the necessary permission to access resources referenced in the input.
+404	NOT_FOUND	No valid object is found from the designated URL.	Image file not found in the storage URL.	Check and fix the file location.
+429	RESOURCE_EXHAUSTED	Depending on the error message, the error could be caused by the following:
+
+1. API quota over the limit.
+
+2. Server overload due to shared server capacity.
+
+3. You've reached the daily limit for requests using logprobs.	Gemini API exceeds request per minute limit.	1. Check Generative AI on Agent Platform quota limits. If needed, apply for a higher quota.
+
+2. Retry after a few seconds. If the error persists after a prolonged period of time (hours), contact Agent Platform support.
+
+3. Consider purchasing Provisioned Throughput.
+499	CANCELLED	Request is cancelled by the client.		
+500	UNKNOWN / INTERNAL	Server error due to overload or dependency failure.	Request is throttled, because the service is temporarily overloaded.	Retry after a few seconds. If the error persists after a prolonged period of time (hours), contact Agent Platform support.
+503	UNAVAILABLE	Service is temporarily unavailable.	Server isn't responding to the incoming requests.	The unavailable status might be temporary. However, if the error persists, contact Agent Platform support.
+504	DEADLINE_EXCEEDED	The request didn't finish within the deadline. If the client sets a deadline shorter than the server's default deadline, it might cause 504 errors.	Client sets a deadline of 10 seconds, which is too short for the requests to finish.	Remove the deadline setting to use the server default, or set a longer deadline.
+Handle errors
+
+Avoid spikes in traffic. Spikes are sudden and significant increases in the number of requests within a very short period of time. Sometimes, spikes in traffic might cause issues for quota enforcement and might increase the chance of server overloading.
+
+Be careful about retrying an event. We recommend retrying no more than two times. The minimum delay is one second with subsequent requests backing up exponentially. For more information, see Retry strategy.
+
+What's next
+Generative AI on Gemini Enterprise Agent Platform has some limitations. To learn more, see Model limitations.
+Try a quickstart tutorial using Vertex AI Studio or the Agent Platform API.
+Explore pretrained models in Model Garden.
+Learn about quotas and limits.
+Learn about pricing.
+Was this helpful?
+Send feedback
+
+Except as otherwise noted, the content of this page is licensed under the Creative Commons Attribution 4.0 License, and code samples are licensed under the Apache 2.0 License. For details, see the Google Developers Site Policies. Java is a registered trademark of Oracle and/or its affiliates.
+
+Last updated 2026-10-28 UTC.
+
+Products and pricing
+See all products
+Google Cloud pricing
+Google Cloud Marketplace
+Contact sales
+Support
+Community forums
+Support
+Release Notes
+System status
+Resources
+GitHub
+Getting Started with Google Cloud
+Code samples
+Cloud Architecture Center
+Training and Certification
+Builders Hub
+Engage
+Blog
+Events
+X (Twitter)
+Google Cloud on YouTube
+Google Cloud Tech on YouTube
+Android
+Chrome
+Firebase
+Google AI
+About Google
+Privacy
+Site terms
+Google Cloud terms
+Our third decade of climate action: join us
+Sign up for the Google Cloud newsletter
+Subscribe
