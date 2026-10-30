@@ -61,4 +61,4 @@ redis==8.1.0
 requests==2.34.2
 
 # Vertex AI provider: signs the service account assertion (RS256) in app/services/vertex.py
-cryptography==49.0.0
+cryptography==50.0.0
