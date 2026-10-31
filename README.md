@@ -90,13 +90,13 @@ claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/backen
 claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- C:\abs\backend\venv\Scripts\python.exe C:\abs\backend\mcp_server\server.py
 ```
 
-Use absolute paths (`abs` stands for your clone's location), and add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
+Use absolute paths, and add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
 
 **Limits:** local stdio only, read-only, not deployed, no rate limiting, and never run in Claude Desktop or Claude Code (I used the SDK's client and a raw JSON-RPC session). Citations are the chunks the model was given, not proof the answer is supported by them, and retrieved text may carry an instruction, so the client must treat it as untrusted.
 
 ## Agent skill
 
-[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill, and the tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)).
+[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill, and tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)). Hermes Agent runs both too ([notes](docs/hermes-agent.md)).
 
 ## Vertex AI Gemini provider
 
