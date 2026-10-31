@@ -13,7 +13,7 @@ hermes mcp add enterprise-rag --command /abs/backend/venv/Scripts/python.exe --a
 hermes mcp test enterprise-rag        # lists the three tools
 ```
 
-Hermes registers each tool as `mcp__enterprise_rag__<tool>` (the server's resource and prompt calls come along, seven in all). The server runs with `--demo-corpus`, so the four synthetic documents in `backend/eval/corpus` were the index, with no Qdrant. The Agent Skill in [`skills/querying-knowledge-base/`](../skills/querying-knowledge-base/SKILL.md) loads into Hermes unchanged: copy the folder into the Hermes home's `skills/` directory and start a session with `-s querying-knowledge-base`.
+Hermes registers each tool as `mcp__enterprise_rag__<tool>` (the server's resource and prompt calls come along, seven in all). The server runs with `--demo-corpus`, so the synthetic documents in `backend/eval/corpus` were the index, with no Qdrant. The Agent Skill in [`skills/querying-knowledge-base/`](../skills/querying-knowledge-base/SKILL.md) loads into Hermes unchanged: copy the folder into the Hermes home's `skills/` directory and start a session with `-s querying-knowledge-base`.
 
 ```bash
 hermes chat -Q -t enterprise-rag -s querying-knowledge-base --query-file question.txt
