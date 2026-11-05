@@ -9,7 +9,7 @@
     "lint": "eslint --max-warnings=0"
   },
   "dependencies": {
-    "next": "^16.2.6",
+    "next": "^16.4.3",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -18,9 +18,9 @@
     "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "baseline-browser-mapping": "^2.11.30",
+    "baseline-browser-mapping": "^2.11.34",
     "eslint": "^10",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
