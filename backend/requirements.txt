@@ -70,7 +70,7 @@ langsmith==0.14.15
 lxml==6.1.3
 markdown-it-py==4.2.0
 MarkupSafe==3.0.4
-marshmallow==3.26.2
+marshmallow==4.3.1
 mdurl==0.1.2
 mmh3==5.3.1
 mpmath==1.4.1
