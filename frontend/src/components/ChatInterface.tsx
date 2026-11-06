@@ -264,6 +264,9 @@ export function ChatInterface() {
                         {source.page && (
                           <p className="text-slate-500 mt-1">Page {source.page}</p>
                         )}
+                        {source.location && (
+                          <p className="text-slate-500 mt-1">{source.location}</p>
+                        )}
                       </div>
                     ))}
                   </div>

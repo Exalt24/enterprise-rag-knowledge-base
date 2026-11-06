@@ -22,7 +22,7 @@ A second front door sits beside the API. `backend/mcp_server/server.py` is a rea
 
 Upload, parse, chunk, embed, store.
 
-1. `document_parser.py` reads PDF (pypdf), DOCX (python-docx), TXT and Markdown. OCR for scanned PDFs uses pytesseract and pdf2image and only runs locally, because it needs system binaries.
+1. `document_parser.py` reads PDF (pypdf), DOCX (python-docx), XLSX (openpyxl), TXT and Markdown. OCR for scanned PDFs uses pytesseract and pdf2image and only runs locally, because it needs system binaries.
 2. `chunking.py` uses LangChain's `RecursiveCharacterTextSplitter` with separators `\n\n`, `\n`, `. `, space, then nothing, at 500 characters with 50 overlap (`length_function=len`, so these are characters, not tokens). The overlap exists so a sentence spanning a chunk boundary still appears whole in one chunk.
 3. `embeddings.py` produces 384-dimension all-MiniLM-L6-v2 vectors, L2-normalised so that cosine similarity is a dot product.
 4. `vector_store.py` upserts into a Qdrant collection created with cosine distance. Ingestion embeds and upserts in batches (`INGEST_BATCH_SIZE`, default 16) to bound peak memory, so a large file cannot OOM a small instance.

@@ -4,6 +4,7 @@ Document Parser Service
 Extracts text from various document formats:
 - PDF (using pypdf)
 - DOCX (using python-docx)
+- XLSX (using openpyxl, formulas read as the values Excel last saved)
 - TXT, MD (plain text)
 - OCR support for scanned PDFs (local only)
 
@@ -11,14 +12,18 @@ Returns standardized Document objects with rich metadata.
 
 """
 
-from typing import List
+from typing import List, Optional
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from docx import Document as DocxDocument
 from langchain_core.documents import Document
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 import os
+import re
+import zipfile
 
 # OCR support (local only - Render has 512MB RAM limit)
 try:
@@ -41,7 +46,7 @@ class DocumentParser:
     """
     Parse documents and extract text content with rich metadata.
 
-    Supports: PDF, DOCX, TXT, MD
+    Supports: PDF, DOCX, XLSX, TXT, MD
     Returns: LangChain Document objects with metadata
 
     Features:
@@ -51,7 +56,18 @@ class DocumentParser:
     - Specific error handling
     """
 
-    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".txt", ".md"}
+
+    # Workbook limits. A workbook over any of them is refused with a clear error, never cut short without saying so.
+    # The block size sits under the chunker's 500 characters so a block is stored as one chunk with one cell range.
+    XLSX_MAX_SHEETS = 20
+    XLSX_MAX_ROWS = 20000  # rows read across the workbook, empty ones included
+    XLSX_MAX_COLUMNS = 50
+    XLSX_MAX_UNCOMPRESSED_MB = 50  # the XML inside the zip, checked before it is opened (zip bombs)
+    XLSX_CELL_CHARS = 200
+    XLSX_BLOCK_CHARS = 480  # the whole block text, its sheet, columns and range lines included
+    XLSX_BLOCK_ROWS = 25
+    _OLE_MAGIC = bytes.fromhex("d0cf11e0a1b11ae1")  # an encrypted .xlsx is stored in this container, not a zip
 
     @classmethod
     def is_supported(cls, file_path: str) -> bool:
@@ -95,6 +111,8 @@ class DocumentParser:
             return cls._parse_pdf(path, split_by_page, use_ocr)
         elif extension == ".docx":
             return cls._parse_docx(path)
+        elif extension == ".xlsx":
+            return cls._parse_xlsx(path)
         elif extension in {".txt", ".md"}:
             return cls._parse_text(path)
 
@@ -258,6 +276,162 @@ class DocumentParser:
 
         except Exception as e:
             raise ValueError(f"Failed to parse DOCX {path.name}: {e}")
+
+    @classmethod
+    def _xlsx_cell_text(cls, value) -> str:
+        """One cell as short text; an empty cell is an empty string."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, datetime):
+            if value.time() == datetime.min.time():
+                return value.date().isoformat()
+            return value.isoformat(sep=" ")
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        text = " ".join(str(value).split())
+        if len(text) > cls.XLSX_CELL_CHARS:
+            text = text[: cls.XLSX_CELL_CHARS - 3] + "..."
+        return text
+
+    @classmethod
+    def _xlsx_check_container(cls, path: Path) -> None:
+        """Refuse a file that is not a readable, unprotected workbook before openpyxl sees it."""
+        with open(path, "rb") as f:
+            head = f.read(len(cls._OLE_MAGIC))
+        if head == cls._OLE_MAGIC:
+            raise ValueError(
+                f"{path.name} is password protected (or is an old .xls file renamed). "
+                "Remove the password and save it as .xlsx, then upload it again."
+            )
+        if not zipfile.is_zipfile(path):
+            raise ValueError(
+                f"{path.name} is not a valid .xlsx workbook (it is damaged or is a different kind of file)."
+            )
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if any(entry.flag_bits & 0x1 for entry in entries):
+                raise ValueError(f"{path.name} is password protected. Remove the password and upload it again.")
+            if sum(entry.file_size for entry in entries) > cls.XLSX_MAX_UNCOMPRESSED_MB * 1024 * 1024:
+                raise ValueError(
+                    f"{path.name} unpacks to more than {cls.XLSX_MAX_UNCOMPRESSED_MB} MB, which is over the limit."
+                )
+
+    @classmethod
+    def _xlsx_preamble_chars(cls, sheet: str, header: List[str]) -> int:
+        """Characters the sheet, columns and range lines add to a block (the range line is counted at its widest)."""
+        columns = len("Columns: " + " | ".join(h for h in header if h)) + 1 if header else 0
+        return len(f"Sheet: {sheet}") + 1 + columns + 45
+
+    @classmethod
+    def _xlsx_block(cls, path: Path, file_stat, sheet: str, header: List[str], block: list) -> Document:
+        """One block of rows as one Document that carries its sheet and cell range."""
+        first_col = min(b[2] for b in block)
+        last_col = max(b[3] for b in block)
+        first_row, last_row = block[0][0], block[-1][0]
+        cell_range = f"{get_column_letter(first_col)}{first_row}:{get_column_letter(last_col)}{last_row}"
+        quoted = sheet if re.fullmatch(r"\w+", sheet) else "'" + sheet.replace("'", "''") + "'"
+        lines = [f"Sheet: {sheet}"]
+        if header:
+            lines.append("Columns: " + " | ".join(h for h in header if h))
+        lines.append(f"Rows {first_row} to {last_row} ({cell_range})")
+        lines.extend(b[1] for b in block)
+        text = "\n".join(lines)
+        return Document(
+            page_content=text,
+            metadata={
+                "source": str(path),
+                "file_name": path.name,
+                "file_type": "xlsx",
+                "sheet": sheet,
+                "cell_range": cell_range,
+                "location": f"{quoted}!{cell_range}",
+                "row_start": first_row,
+                "row_end": last_row,
+                "char_count": len(text),
+                "word_count": len(text.split()),
+                "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                "file_size_kb": round(file_stat.st_size / 1024, 2),
+            },
+        )
+
+    @classmethod
+    def _parse_xlsx(cls, path: Path) -> List[Document]:
+        """
+        Parse XLSX file.
+
+        Each sheet becomes blocks of rows. A block is one Document holding the sheet name, the column headers
+        and the row text, with the sheet and the cell range (for example Budget!A2:C26) in its metadata so a
+        citation can point at the cells. Formulas are read as the value Excel last saved; a workbook that was
+        never opened in Excel has none, so those cells come out empty. Hidden sheets are left out.
+
+        Raises ValueError (with a plain message) for a damaged or password protected workbook, a workbook over
+        the sheet, row, column or size limits, and a workbook with no text in it.
+        """
+        try:
+            cls._xlsx_check_container(path)
+            file_stat = path.stat()
+            workbook = load_workbook(str(path), read_only=True, data_only=True)
+            try:
+                visible = [ws for ws in workbook.worksheets if ws.sheet_state == "visible"]
+                if len(visible) > cls.XLSX_MAX_SHEETS:
+                    raise ValueError(f"{path.name} has {len(visible)} sheets; the limit is {cls.XLSX_MAX_SHEETS}.")
+                documents: List[Document] = []
+                rows_read = 0
+                for ws in visible:
+                    header: Optional[List[str]] = None  # None until the first filled row has been seen
+                    block: list = []  # (row number, text, first column, last column)
+                    block_chars = 0  # characters of row text in the open block
+                    rows = ws.iter_rows(values_only=True, max_col=cls.XLSX_MAX_COLUMNS + 1)
+                    for row_number, row in enumerate(rows, start=1):
+                        rows_read += 1
+                        if rows_read > cls.XLSX_MAX_ROWS:
+                            raise ValueError(f"{path.name} has more than {cls.XLSX_MAX_ROWS} rows, which is over the limit.")
+                        cells = [cls._xlsx_cell_text(v) for v in row]
+                        if len(cells) > cls.XLSX_MAX_COLUMNS and cells[cls.XLSX_MAX_COLUMNS]:
+                            raise ValueError(
+                                f"{path.name} sheet {ws.title} has more than {cls.XLSX_MAX_COLUMNS} columns, "
+                                "which is over the limit."
+                            )
+                        cells = cells[: cls.XLSX_MAX_COLUMNS]
+                        filled = [i for i, c in enumerate(cells) if c]
+                        if not filled:
+                            continue
+                        if header is None:
+                            # the first filled row is the header when every filled cell in it is text
+                            if all(isinstance(row[i], str) for i in filled):
+                                header = cells
+                                continue
+                            header = []
+                        if header:
+                            labels = [header[i] if i < len(header) and header[i] else get_column_letter(i + 1) for i in filled]
+                            text = "; ".join(f"{label}: {cells[i]}" for label, i in zip(labels, filled))
+                        else:
+                            text = " | ".join(cells[i] for i in filled)
+                        used = cls._xlsx_preamble_chars(ws.title, header) + block_chars
+                        if block and (len(block) >= cls.XLSX_BLOCK_ROWS or used + len(text) > cls.XLSX_BLOCK_CHARS):
+                            documents.append(cls._xlsx_block(path, file_stat, ws.title, header, block))
+                            block, block_chars = [], 0
+                        block.append((row_number, text, filled[0] + 1, filled[-1] + 1))
+                        block_chars += len(text) + 1
+                    if block:
+                        documents.append(cls._xlsx_block(path, file_stat, ws.title, header or [], block))
+            finally:
+                workbook.close()
+
+            if not documents:
+                raise ValueError(f"XLSX file is empty: {path.name}")
+            return documents
+
+        except ValueError:
+            raise
+        except PermissionError:
+            raise ValueError(f"Permission denied: {path.name}")
+        except Exception as e:
+            raise ValueError(f"Failed to parse XLSX {path.name}: {e}")
 
     @classmethod
     def _parse_text(cls, path: Path) -> List[Document]:

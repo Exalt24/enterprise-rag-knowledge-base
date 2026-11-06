@@ -17,7 +17,7 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
     if (!file) return;
 
     // Validate file type
-    const allowedTypes = [".pdf", ".docx", ".txt", ".md"];
+    const allowedTypes = [".pdf", ".docx", ".xlsx", ".txt", ".md"];
     const fileExt = file.name
       .substring(file.name.lastIndexOf("."))
       .toLowerCase();
@@ -68,7 +68,7 @@ export function DocumentUpload({ onUploadSuccess }: DocumentUploadProps) {
             title="Upload Document"
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.txt,.md"
+            accept=".pdf,.docx,.xlsx,.txt,.md"
             onChange={handleFileUpload}
             className="hidden"
             disabled={uploading}

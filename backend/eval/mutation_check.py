@@ -13,6 +13,7 @@ of the check. A mutant whose target cannot be found also fails the check: it mea
     python eval/mutation_check.py --skip-mcp      leave out the MCP server mutants (they need requirements-mcp.txt)
 
 The MCP server mutants break mcp_server/server.py and run only the server tests; each must fail a named test.
+The workbook loader mutants (xlsx-*) break app/services/document_parser.py and run only tests/test_document_parser_xlsx.py.
 The documentation mutants (readme-*, docs-*) edit a number or a date in the README or docs/evaluation.md and run only the
 tests that read them: a count written by hand and left stale must fail tests/test_eval_readme_counts.py, and a claim that
 stopped being true (the design notes saying there is no CI test run) must fail tests/test_eval_docs_not_stale.py.
@@ -34,6 +35,7 @@ from typing import Callable, List, Optional
 BACKEND = Path(__file__).resolve().parents[1]
 ADVANCED = "app/services/advanced_retrieval.py"
 HARNESS = "eval/harness.py"
+PARSER = "app/services/document_parser.py"
 
 # Cheapest first would be test_hybrid_ranking, but the eval tests run first (the generated class tests before the older
 # ones) so the report shows which of the NEW tests catch each mutant; the stubbed ranking test only gets a turn when they all stayed green.
@@ -57,6 +59,8 @@ MCP_SERVER = "mcp_server/server.py"
 MCP_RUNS = (("tests/test_mcp_server.py", "tests/test_mcp_server_classes.py", "tests/test_mcp_server_stdio.py"),)
 # The documentation mutants edit TEXT (the README, docs/evaluation.md), not code, and run only the tests that read the docs.
 DOC_RUNS = (("tests/test_eval_readme_counts.py", "tests/test_eval_readme_claims.py", "tests/test_eval_docs_not_stale.py"),)
+# The workbook loader mutants break document_parser.py and run only the loader tests.
+XLSX_RUNS = (("tests/test_document_parser_xlsx.py",),)
 README = "../README.md"  # relative to backend/, so the same path works in the real tree and in the temporary copy
 EVALUATION_DOC = "../docs/evaluation.md"
 DESIGN_NOTES = "../docs/SYSTEM-KNOWLEDGE.md"
@@ -445,6 +449,158 @@ def _replace(tree: ast.AST, old: ast.AST, new: ast.AST) -> None:
     raise TargetNotFound("could not replace node")
 
 
+def _xlsx_calls(fn: ast.AST, name: str) -> list:
+    return [n for n in ast.walk(fn) if isinstance(n, ast.Call) and getattr(n.func, "id", getattr(n.func, "attr", "")) == name]
+
+
+def _if_testing(fn: ast.AST, predicate) -> ast.If:
+    return _only([n for n in ast.walk(fn) if isinstance(n, ast.If) and predicate(n.test)], "the guarded if statement")
+
+
+def xlsx_formulas_read_as_text(tree):
+    """The workbook is opened without data_only, so a formula comes back as its text and not as the value Excel saved."""
+    fn = _function(tree, "_parse_xlsx")
+    kw = _only([k for c in _xlsx_calls(fn, "load_workbook") for k in c.keywords if k.arg == "data_only"], "data_only argument")
+    kw.value = ast.Constant(False)
+
+
+def xlsx_password_signature_ignored(tree):
+    """A password protected workbook (the OLE container) is no longer recognised and falls through to the generic error."""
+    fn = _function(tree, "_xlsx_check_container")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.Compare) and "_OLE_MAGIC" in ast.unparse(t))
+    cond.test = ast.Constant(False)
+
+
+def xlsx_encrypted_entries_ignored(tree):
+    """A zip whose entries carry the encrypted flag is no longer refused as password protected."""
+    fn = _function(tree, "_xlsx_check_container")
+    cond = _if_testing(fn, lambda t: "flag_bits" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_unpacked_size_limit_removed(tree):
+    """A workbook that unpacks to a huge size is opened anyway."""
+    fn = _function(tree, "_xlsx_check_container")
+    cond = _if_testing(fn, lambda t: "file_size" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_row_limit_removed(tree):
+    """No limit on the rows read from a workbook."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.Compare) and "rows_read" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_row_limit_boundary_loosened(tree):
+    """A workbook with exactly the limit of rows is refused (> becomes >=)."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.Compare) and "rows_read" in ast.unparse(t))
+    cond.test.ops = [ast.GtE()]
+
+
+def xlsx_column_limit_removed(tree):
+    """A sheet wider than the column limit is cut to the limit without saying so."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.BoolOp) and "XLSX_MAX_COLUMNS" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_column_overflow_never_read(tree):
+    """The row is read only up to the column limit, so a cell beyond it is never seen and the sheet is never refused."""
+    fn = _function(tree, "_parse_xlsx")
+    kw = _only([k for c in _xlsx_calls(fn, "iter_rows") for k in c.keywords if k.arg == "max_col"], "max_col argument")
+    kw.value = kw.value.left  # cls.XLSX_MAX_COLUMNS + 1  ->  cls.XLSX_MAX_COLUMNS
+
+
+def xlsx_sheet_limit_removed(tree):
+    """No limit on the number of sheets."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.Compare) and "XLSX_MAX_SHEETS" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_hidden_sheets_read(tree):
+    """Hidden sheets are read like the visible ones."""
+    fn = _function(tree, "_parse_xlsx")
+    comp = _only([n for n in ast.walk(fn) if isinstance(n, ast.ListComp) and "sheet_state" in ast.unparse(n)], "the visible sheet filter")
+    comp.generators[0].ifs = []
+
+
+def xlsx_row_numbers_start_at_zero(tree):
+    """Row numbers in the cell range are one too low."""
+    fn = _function(tree, "_parse_xlsx")
+    call = _only([c for c in _xlsx_calls(fn, "enumerate") if any(k.arg == "start" for k in c.keywords)], "enumerate over the rows")
+    _only([k for k in call.keywords if k.arg == "start"], "start argument").value = ast.Constant(0)
+
+
+def xlsx_location_without_the_sheet(tree):
+    """The citation location is the bare cell range, with no sheet name."""
+    fn = _function(tree, "_xlsx_block")
+    entry = _only([(k, v) for d in ast.walk(fn) if isinstance(d, ast.Dict) for k, v in zip(d.keys, d.values) if isinstance(k, ast.Constant) and k.value == "location"], "the location entry")
+    for d in ast.walk(fn):
+        if isinstance(d, ast.Dict) and any(v is entry[1] for v in d.values):
+            d.values[d.values.index(entry[1])] = ast.Name(id="cell_range", ctx=ast.Load())
+
+
+def xlsx_block_row_cap_removed(tree):
+    """A block may hold any number of rows."""
+    fn = _function(tree, "_parse_xlsx")
+    cmp_ = _only([n for n in ast.walk(fn) if isinstance(n, ast.Compare) and "XLSX_BLOCK_ROWS" in ast.unparse(n)], "the block row comparison")
+    _replace(tree, cmp_, ast.Constant(False))
+
+
+def xlsx_block_char_cap_removed(tree):
+    """A block may grow past the chunker's size."""
+    fn = _function(tree, "_parse_xlsx")
+    cmp_ = _only([n for n in ast.walk(fn) if isinstance(n, ast.Compare) and "XLSX_BLOCK_CHARS" in ast.unparse(n)], "the block size comparison")
+    _replace(tree, cmp_, ast.Constant(False))
+
+
+def xlsx_block_preamble_not_counted(tree):
+    """The sheet, columns and range lines are left out of the block size, so a block comes out over the chunker's size."""
+    fn = _function(tree, "_xlsx_preamble_chars")
+    ret = _only([n for n in ast.walk(fn) if isinstance(n, ast.Return)], "return")
+    ret.value = ast.Constant(0)
+
+
+def xlsx_empty_workbook_accepted(tree):
+    """A workbook with no text in it returns no documents instead of being refused."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.UnaryOp) and "documents" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_header_row_not_detected(tree):
+    """The first row is never taken as the column headers."""
+    fn = _function(tree, "_parse_xlsx")
+    call = _only(_xlsx_calls(fn, "all"), "the all() header test")
+    _replace(tree, call, ast.Constant(False))
+
+
+def xlsx_blank_rows_not_skipped(tree):
+    """A row with nothing in it is treated like a row with data."""
+    fn = _function(tree, "_parse_xlsx")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.UnaryOp) and "filled" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_long_cells_not_cut(tree):
+    """A cell of any length goes into the text whole."""
+    fn = _function(tree, "_xlsx_cell_text")
+    cond = _if_testing(fn, lambda t: isinstance(t, ast.Compare) and "XLSX_CELL_CHARS" in ast.unparse(t))
+    _splice(tree, cond, [])
+
+
+def xlsx_extension_not_supported(tree):
+    """The parser stops listing .xlsx as a supported format."""
+    assign = _only(
+        [n for n in ast.walk(tree) if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "SUPPORTED_EXTENSIONS" for t in n.targets)],
+        "SUPPORTED_EXTENSIONS",
+    )
+    assign.value.elts = [e for e in assign.value.elts if not (isinstance(e, ast.Constant) and e.value == ".xlsx")]
+
+
 @dataclass(frozen=True)
 class Mutant:
     name: str
@@ -495,6 +651,26 @@ MUTANTS: List[Mutant] = [
     Mutant("readme-real-model-date-removed", README, readme_real_model_date_removed, DOC_RUNS, text=True),
     Mutant("docs-calibration-count-edited-by-one", EVALUATION_DOC, evaluation_doc_calibration_count_edited_by_one, DOC_RUNS, text=True),
     Mutant("docs-design-notes-claim-there-is-no-ci", DESIGN_NOTES, design_notes_claim_there_is_no_ci, DOC_RUNS, text=True),
+    Mutant("xlsx-formulas-read-as-text", PARSER, xlsx_formulas_read_as_text, XLSX_RUNS),
+    Mutant("xlsx-password-signature-ignored", PARSER, xlsx_password_signature_ignored, XLSX_RUNS),
+    Mutant("xlsx-encrypted-entries-ignored", PARSER, xlsx_encrypted_entries_ignored, XLSX_RUNS),
+    Mutant("xlsx-unpacked-size-limit-removed", PARSER, xlsx_unpacked_size_limit_removed, XLSX_RUNS),
+    Mutant("xlsx-row-limit-removed", PARSER, xlsx_row_limit_removed, XLSX_RUNS),
+    Mutant("xlsx-row-limit-boundary-loosened", PARSER, xlsx_row_limit_boundary_loosened, XLSX_RUNS),
+    Mutant("xlsx-column-limit-removed", PARSER, xlsx_column_limit_removed, XLSX_RUNS),
+    Mutant("xlsx-column-overflow-never-read", PARSER, xlsx_column_overflow_never_read, XLSX_RUNS),
+    Mutant("xlsx-sheet-limit-removed", PARSER, xlsx_sheet_limit_removed, XLSX_RUNS),
+    Mutant("xlsx-hidden-sheets-read", PARSER, xlsx_hidden_sheets_read, XLSX_RUNS),
+    Mutant("xlsx-row-numbers-start-at-zero", PARSER, xlsx_row_numbers_start_at_zero, XLSX_RUNS),
+    Mutant("xlsx-location-without-the-sheet", PARSER, xlsx_location_without_the_sheet, XLSX_RUNS),
+    Mutant("xlsx-block-row-cap-removed", PARSER, xlsx_block_row_cap_removed, XLSX_RUNS),
+    Mutant("xlsx-block-char-cap-removed", PARSER, xlsx_block_char_cap_removed, XLSX_RUNS),
+    Mutant("xlsx-block-preamble-not-counted", PARSER, xlsx_block_preamble_not_counted, XLSX_RUNS),
+    Mutant("xlsx-empty-workbook-accepted", PARSER, xlsx_empty_workbook_accepted, XLSX_RUNS),
+    Mutant("xlsx-header-row-not-detected", PARSER, xlsx_header_row_not_detected, XLSX_RUNS),
+    Mutant("xlsx-blank-rows-not-skipped", PARSER, xlsx_blank_rows_not_skipped, XLSX_RUNS),
+    Mutant("xlsx-long-cells-not-cut", PARSER, xlsx_long_cells_not_cut, XLSX_RUNS),
+    Mutant("xlsx-extension-not-supported", PARSER, xlsx_extension_not_supported, XLSX_RUNS),
 ]
 
 
@@ -529,6 +705,10 @@ def _copy_tree(destination: Path) -> Path:
     for part in ("docs", "skills"):
         shutil.copytree(BACKEND.parent / part, destination / part, ignore=shutil.ignore_patterns("*.gif"))
     shutil.copy(BACKEND.parent / "README.md", destination / "README.md")
+    # the upload formats test reads the upload box beside backend/ to keep its list in step with the parser's
+    upload_box = Path("frontend") / "src" / "components" / "DocumentUpload.tsx"
+    (destination / upload_box).parent.mkdir(parents=True)
+    shutil.copy(BACKEND.parent / upload_box, destination / upload_box)
     return target
 
 

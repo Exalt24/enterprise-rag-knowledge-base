@@ -70,6 +70,10 @@ jobs:
         run: python -m pytest tests/test_vertex_provider.py
       - name: Vertex AI provider mutation check
         run: python eval/vertex_mutation_check.py
+      # The Excel loader: every workbook is built by the test itself, so nothing needs a file, Qdrant or a model. The
+      # mutation check below breaks the loader one guard at a time and runs this file against each copy.
+      - name: Document parser tests
+        run: python -m pytest tests/test_document_parser_*.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       - name: Mutation check

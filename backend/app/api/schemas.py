@@ -56,6 +56,7 @@ class Source(BaseModel):
 
     file_name: str = Field(..., description="Source file name")
     page: Optional[int] = Field(None, description="Page number (for PDFs)")
+    location: Optional[str] = Field(None, description="Sheet and cell range (for workbooks), for example Budget!A2:C26")
     content_preview: str = Field(..., description="Preview of source content")
     relevance_score: Optional[float] = Field(None, description="Similarity score")
 

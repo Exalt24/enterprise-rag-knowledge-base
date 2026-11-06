@@ -17,6 +17,7 @@ export interface QueryRequest {
 export interface Source {
   file_name: string;
   page?: number;
+  location?: string;
   content_preview: string;
   relevance_score?: number;
 }

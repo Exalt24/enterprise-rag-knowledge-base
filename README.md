@@ -12,7 +12,7 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 ## What broke
 
-Upload documents (PDF, DOCX, TXT, Markdown), ask questions, get answers with citations: FastAPI and LangChain over Qdrant, a Next.js front end. I built it to see where a retrieval pipeline fails, so most of this README is about the failures.
+Upload documents (PDF, DOCX, XLSX, TXT, Markdown), ask questions, get answers with citations: FastAPI and LangChain over Qdrant, a Next.js front end. Excel workbooks upload too, and answers cite the sheet and cells, like `Vendors!A2:C3`. I built it to see where a retrieval pipeline fails, so most of this README is about the failures.
 
 
 - **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match scored 0.893. Every test stayed green because they only checked that results came back. The fix uses the cosine score directly, `backend/tests/test_hybrid_ranking.py` now fails on the original line, and the mutation check puts the bug back and shows a test going red. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent) because it predated the fix.
@@ -135,10 +135,9 @@ None of these needs a running service, a model download, a key or a network; run
 
 ## Next steps
 
-- Table 1 pins the harness and the ranking code in CI. Table 2 is a local run (2026-10-23).
 - The corpus is small and the questions were written from it, which gives wide intervals, so this is a regression check that pins behaviour. A larger corpus is the next step for comparing hybrid against vector.
 - BM25 next: lowercasing, stripping punctuation and returning nothing when no term matches, since the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
-- The fallback counter is read by the evaluation, and exposing it on the API routes is next.
+- The fallback counter is read by the evaluation; the API routes do not expose it yet.
 - Cross-encoder reranking works locally, and measuring it is next. HyDE and multi-query exist as library functions, ready to become API routes and be evaluated.
 - Smaller items to tidy are listed in [docs/reference.md](docs/reference.md#known-issues).
 

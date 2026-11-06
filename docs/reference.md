@@ -73,7 +73,7 @@ Each response reports how many chunks the file became. Then ask, for example, "H
 
 ### 5. Use it
 
-Upload documents in the web UI (PDF, DOCX, TXT, MD) and ask questions in the chat. The UI has a hybrid search toggle and a cross-encoder reranking toggle; the reranking toggle is disabled in the deployed UI. Or use the API:
+Upload documents in the web UI (PDF, DOCX, XLSX, TXT, MD) and ask questions in the chat. The UI has a hybrid search toggle and a cross-encoder reranking toggle; the reranking toggle is disabled in the deployed UI. Or use the API:
 
 - `POST /api/query`, with an optional `conversation_id` for multi-turn memory
 - `POST /api/query/stream`, SSE and stateless
@@ -176,6 +176,17 @@ docs = DocumentParser.parse("scanned_document.pdf", use_ocr=True)
 
 OCR needs system binaries: `tesseract-ocr` and `poppler-utils` on Debian or Ubuntu, `brew install tesseract poppler` on macOS, or the [UB-Mannheim Windows build](https://github.com/UB-Mannheim/tesseract/wiki).
 
+### Excel workbooks (.xlsx)
+
+`DocumentParser.parse("book.xlsx")` reads each visible sheet in blocks of rows. A block is one document of at most 480 characters (under the chunker's 500, so it stays one chunk) that holds the sheet name, the column headers taken from the first row of text, and the rows as `Header: value` pairs. Its metadata carries the `sheet`, the `cell_range` and a `location` such as `Vendors!A2:C3`; the query response puts that `location` on each source, and the chat box shows it where a PDF shows its page.
+
+- Formulas are read as the value Excel last saved. A workbook that was only ever written by a script has no saved values, so its formula cells come out empty.
+- Hidden sheets are left out. A cell is cut at 200 characters.
+- A workbook is refused with a plain message when it is damaged, password protected (Excel keeps an encrypted workbook in an OLE container, which the loader recognises by its first eight bytes), has more than 20 sheets, 20,000 rows or 50 columns, or unpacks to more than 50 MB. The upload route's own 10 MB cap applies first.
+- Old `.xls` files are not read. Save them as `.xlsx`.
+
+`tests/test_document_parser_xlsx.py` builds every workbook it reads, and 20 mutants in `eval/mutation_check.py` (`xlsx-*`) each remove one guard of the loader and must fail a test there.
+
 ## API examples
 
 ```bash
@@ -208,7 +219,7 @@ enterprise-rag-knowledge-base/
 │   │   ├── api/             # routes.py, schemas.py
 │   │   ├── core/            # config.py, rate_limiter.py
 │   │   ├── services/
-│   │   │   ├── document_parser.py     # PDF, DOCX, TXT, Markdown, OCR
+│   │   │   ├── document_parser.py     # PDF, DOCX, XLSX, TXT, Markdown, OCR
 │   │   │   ├── chunking.py            # recursive splitter, 500 / 50
 │   │   │   ├── embeddings.py          # fastembed (ONNX) or sentence-transformers
 │   │   │   ├── vector_store.py        # Qdrant client

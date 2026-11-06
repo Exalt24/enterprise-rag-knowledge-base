@@ -86,6 +86,7 @@ Two behaviours of the BM25 branch showed up while building the evaluation and ar
 - the README table losing its recall columns
 - the bootstrap interval read from the wrong percentile at either end
 - the eval chunking following the environment, and label validation skipped
+- the workbook loader in `app/services/document_parser.py` (`xlsx-*`): the saved formula value, the password protected and encrypted-entry checks, the size, row, column and sheet limits, hidden sheets, row numbers, the sheet in the citation location, the block size, empty workbooks, the header row, blank rows and long cells. Each runs only `tests/test_document_parser_xlsx.py`.
 - the MCP server, in `mcp_server/server.py`: see the next section
 - the docs, which are edited as text rather than code: the README chunk count left stale, a question total, a category count or a Table 1 `n` cell edited by one, Table 2 losing the date of its run, the calibration count in this page edited by one, and the design notes denying again that CI runs any test. Each must fail a named test in `test_eval_readme_counts.py` or `test_eval_docs_not_stale.py`.
 

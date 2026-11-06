@@ -104,7 +104,8 @@ class RetrievalService:
             # Extract metadata
             source = doc.metadata.get("file_name", "Unknown")
             page = doc.metadata.get("page", "")
-            page_info = f" (Page {page})" if page else ""
+            location = doc.metadata.get("location", "")
+            page_info = f" (Page {page})" if page else (f" ({location})" if location else "")
 
             # Format with source attribution
             context_parts.append(

@@ -210,6 +210,7 @@ async def query_knowledge_base(request: QueryRequest):
                     sources.append(Source(
                         file_name=source_dict['file_name'],
                         page=source_dict.get('page'),
+                        location=source_dict.get('location'),
                         content_preview=source_dict['content_preview'],
                         relevance_score=None
                     ))
@@ -243,6 +244,7 @@ async def query_knowledge_base(request: QueryRequest):
                 sources.append(Source(
                     file_name=source_dict["file_name"],
                     page=source_dict.get("page"),
+                    location=source_dict.get("location"),
                     content_preview=source_dict["content_preview"],
                     relevance_score=score
                 ))
@@ -268,7 +270,7 @@ async def ingest_document(file: UploadFile = File(...)):
     """
     Upload and ingest a document into the knowledge base.
 
-    Supported formats: PDF, DOCX, TXT, MD
+    Supported formats: PDF, DOCX, XLSX, TXT, MD
 
     Flow:
     1. Save uploaded file to data/documents/
@@ -285,11 +287,11 @@ async def ingest_document(file: UploadFile = File(...)):
     try:
         # Validate file extension
         file_path = Path(file.filename)
-        if file_path.suffix.lower() not in {'.pdf', '.docx', '.txt', '.md'}:
+        if file_path.suffix.lower() not in {'.pdf', '.docx', '.xlsx', '.txt', '.md'}:
             return IngestResponse(
                 success=False,
                 message="Unsupported file format",
-                error=f"Supported formats: PDF, DOCX, TXT, MD. Got: {file_path.suffix}"
+                error=f"Supported formats: PDF, DOCX, XLSX, TXT, MD. Got: {file_path.suffix}"
             )
 
         # Security: Check file size (configurable via settings)
