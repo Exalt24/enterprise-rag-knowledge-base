@@ -6,19 +6,19 @@ FastAPI RAG service on Qdrant: vector and BM25 hybrid retrieval, SSE streaming a
 
 ![Uploading three documents to a local knowledge base, then asking two questions and watching cited answers stream in](docs/demo.gif)
 
-*Recorded on a local stack: Qdrant in Docker, this repo's backend and front end, and qwen3:14b served by Ollama, over three short sample handbook files. The answer stretches are shown at half speed, marked on screen. More in [docs/reference.md](docs/reference.md#the-recording).*
+*Recorded on a local stack. Qdrant runs in Docker, with this repo's backend and front end and qwen3:14b served by Ollama. The documents are three short handbook samples. The answer stretches are shown at half speed, marked on screen. More in [docs/reference.md](docs/reference.md#the-recording).*
 
-**Proof:** a retrieval evaluation anyone can rerun in one command, a [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients, and CI that runs the tests plus a mutation check. An older 85% and 90% hit rate (2026-08-03, a corpus no longer in this repo) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
+**Proof:** a retrieval evaluation anyone can rerun in one command. A [read-only MCP server](#mcp-server-read-only-local) for Claude Code and other MCP clients. CI that runs the tests plus a mutation check. An older 85% and 90% hit rate (2026-08-03, a corpus no longer in this repo) is kept apart in [docs/engineering-notes.md](docs/engineering-notes.md#retrieval-accuracy).
 
 ## What broke
 
-Upload documents (PDF, DOCX, XLSX, TXT, Markdown), ask questions, get answers with citations: FastAPI and LangChain over Qdrant, a Next.js front end. Excel workbooks upload too, and answers cite the sheet and cells, like `Vendors!A2:C3`. I built it to see where a retrieval pipeline fails, so most of this README is about the failures.
+Upload documents (PDF, DOCX, XLSX, TXT, Markdown), ask questions and get answers with citations. FastAPI and LangChain over Qdrant, with a Next.js front end. Excel workbooks upload too. Answers cite the sheet and cells, like `Vendors!A2:C3`. I built it to see where a retrieval pipeline fails. Most of this README is about the failures.
 
 
-- **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match scored 0.893. Every test stayed green because they only checked that results came back. The fix uses the cosine score directly, `backend/tests/test_hybrid_ranking.py` now fails on the original line, and the mutation check puts the bug back and shows a test going red. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent) because it predated the fix.
-- **A silent fallback.** `hybrid_search` catches every exception and answers with plain vector search, so a broken BM25 branch looked like working hybrid retrieval. The engine now counts its fallbacks and the evaluation fails when the count is above zero.
-- **A deploy that looked like a slow cold start.** The 512 MB free instance was OOM-killed on import by the 526.6 MB default torch wheel. The deployed image now uses fastembed (same weights, ONNX Runtime, stored vectors stayed valid): under a real 512 MB cap, import went from about two minutes to 1.87 seconds and peak memory from 438 MiB to 259 MiB (once, no log).
-- **A retired model.** Groq retired the model this service named in seven places and calls failed while the health endpoint still said the vector database was connected. The model is now one setting, `GROQ_MODEL`.
+- **A scoring bug that inverted the ranking.** `hybrid_search` applied `1 / (1 + score)` to a cosine similarity that was already "higher is better". A 0.82 match scored 0.549. A 0.12 match scored 0.893. Every test stayed green. They only checked that results came back. The fix uses the cosine score directly. `backend/tests/test_hybrid_ranking.py` now fails on the original line. The mutation check puts the bug back and shows a test going red. I retracted an earlier accuracy series (about 40, 60 and 67.7 percent). It predated the fix.
+- **A silent fallback.** `hybrid_search` catches every exception and answers with plain vector search. A broken BM25 branch looked like working hybrid retrieval. The engine now counts its fallbacks. The evaluation fails when the count is above zero.
+- **A deploy that looked like a slow cold start.** The 512 MB free instance was OOM-killed on import by the 526.6 MB default torch wheel. The deployed image now uses fastembed. It has the same weights on ONNX Runtime, so stored vectors stayed valid. Under a real 512 MB cap, import went from about two minutes to 1.87 seconds. Peak memory fell from 438 MiB to 259 MiB (once, no log).
+- **A retired model.** Groq retired the model this service named in seven places. Calls failed. The health endpoint still said the vector database was connected. The model is now one setting, `GROQ_MODEL`.
 
 Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
@@ -26,11 +26,11 @@ Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
 ### Rerunnable evaluation (run on 2026-10-23)
 
-The corpus is four documents written as samples for this repository, in [`backend/eval/corpus/`](backend/eval/corpus/), describing a fictional organisation. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus, and a retrieved chunk counts only if it holds it.
+The corpus is four documents in [`backend/eval/corpus/`](backend/eval/corpus/). I wrote them as samples for this repository, about a fictional organisation. They give 27 chunks through the repo's own chunker. The 42 questions in [`backend/eval/questions.jsonl`](backend/eval/questions.jsonl) are 12 direct, 12 paraphrase, 8 multi-document and 10 unanswerable. Each answerable question carries a `must_contain` phrase copied verbatim from the corpus. A retrieved chunk counts only if it holds it.
 
-Everything goes through the repo's own chunker, vector store and retrieval code; only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread: every resample hits the same value, so the method found it every time on these questions, not on others.
+Everything goes through the repo's own chunker, vector store and retrieval code. Only the embedder is swapped. Wiring, labels, baseline and mutants: [docs/evaluation.md](docs/evaluation.md). Cells show the value and a 95% bootstrap interval over questions. A cell at the ceiling (1.00 to 1.00) has no spread, because every resample hits the same value. It found it every time on these questions, not on others.
 
-**What a hit means.** On a multi-document question hit@k counts it when any one needed chunk is in the top k, and recall@k counts how many of the needed chunks are. Elsewhere a question has one needed chunk, so the two are equal.
+**What a hit means.** On a multi-document question hit@k counts it when any one needed chunk is in the top k. recall@k counts how many of the needed chunks are. Elsewhere a question has one needed chunk. There the two are equal.
 
 ```bash
 cd backend && pip install -r requirements-ci.txt
@@ -41,7 +41,7 @@ python eval/run_eval.py --markdown t.md     # the results table below, written f
 python eval/mutation_check.py               # break the guarded code one way at a time (--skip-mcp drops the server mutants)
 ```
 
-**Table 1, HARNESS CHECK (hashing embedder).** This embedder has no idea what any word means, so the table shows that the harness and the ranking code run and are pinned, and says nothing about retrieval quality. CI compares it with a fresh run.
+**Table 1, HARNESS CHECK (hashing embedder).** This embedder has no idea what any word means. The table shows that the harness and the ranking code run and are pinned. It says nothing about retrieval quality. CI compares it with a fresh run.
 
 | method | category | n | hit@1 | hit@3 | MRR | recall@3 | recall@5 |
 |---|---|---|---|---|---|---|---|
@@ -74,13 +74,13 @@ Hybrid fallbacks in this run: 0.
 | hybrid | paraphrase | 12 | 0.58 (0.25 to 0.83) | 0.83 (0.58 to 1.00) | 0.72 (0.52 to 0.92) | 0.83 (0.58 to 1.00) | 0.92 (0.75 to 1.00) |
 | hybrid | multi-document | 8 | 0.62 (0.25 to 0.88) | 1.00 (1.00 to 1.00) | 0.77 (0.56 to 0.94) | 0.69 (0.56 to 0.88) | 0.88 (0.69 to 1.00) |
 
-What it says: every method beats the chance rows by a wide margin. Hybrid did not beat vector on this set (hit@1 is equal on direct and multi-document questions and lower on paraphrase, every interval overlapping), so there is no direction to report. On the multi-document questions hit@3 is 1.00 for all three methods in both tables, but with the real model (2026-10-23) recall@3 is 0.69 for vector, 0.75 for BM25 and 0.69 for hybrid, so a hit there often means one of the needed chunks and not all of them.
+What it says: every method beats the chance rows by a wide margin. Hybrid did not beat vector on this set. On hit@1 they are equal on direct and multi-document questions. Hybrid is lower on paraphrase. Every interval overlaps, so there is no direction to report. On the multi-document questions, hit@3 is 1.00 for all three methods in both tables. With the real model (2026-10-23), recall@3 is 0.69 for vector, 0.75 for BM25 and 0.69 for hybrid. A hit there often means one of the needed chunks and not all of them.
 
-**Unanswerable questions.** The retrieval code has no abstention, so the evaluation defines one: decline when the best chunk's score is below a threshold calibrated on a separate 16-question set (`backend/eval/calibration.jsonl`). With the real model (2026-10-23) 5 of the 10 unanswerable questions were declined (0.50, interval 0.20 to 0.80) while 84% (vector) and 75% (hybrid) of the answerable ones were kept. That is weak, and it wrongly declines paraphrase questions; the calibration questions are closer to the direct style than the paraphrase style.
+**Unanswerable questions.** The retrieval code has no abstention, so the evaluation defines one. It declines when the best chunk's score is below a threshold calibrated on a separate 16-question set (`backend/eval/calibration.jsonl`). With the real model (2026-10-23), 5 of the 10 unanswerable questions were declined (0.50, interval 0.20 to 0.80). 84% (vector) and 75% (hybrid) of the answerable ones were kept. That is weak. It wrongly declines paraphrase questions. The calibration questions are closer to the direct style than the paraphrase style.
 
 ## MCP server (read-only, local)
 
-**Use case:** a Claude Code or other MCP client asks this knowledge base questions and gets answers with cited sources, through three read-only tools (`search_documents`, `ask_question`, `list_documents`). [`backend/mcp_server/server.py`](backend/mcp_server/server.py) runs over stdio on the official Python SDK, Python 3.11 or newer.
+**Use case:** a Claude Code or other MCP client asks this knowledge base questions. It gets answers with cited sources through three read-only tools (`search_documents`, `ask_question`, `list_documents`). [`backend/mcp_server/server.py`](backend/mcp_server/server.py) runs over stdio on the official Python SDK. It needs Python 3.11 or newer.
 
 ```bash
 cd backend && pip install -r requirements.txt -r requirements-mcp.txt
@@ -90,27 +90,27 @@ claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- /abs/backen
 claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- C:\abs\backend\venv\Scripts\python.exe C:\abs\backend\mcp_server\server.py
 ```
 
-Use absolute paths, and add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
+Use absolute paths. Add `--demo-corpus` to try it with no Qdrant and no model download. Tools, citation ids, settings, errors and tests: [docs/mcp-server.md](docs/mcp-server.md).
 
-**Limits:** local stdio only, read-only, not deployed, no rate limiting, and never run in Claude Desktop or Claude Code (I used the SDK's client and a raw JSON-RPC session). Citations are the chunks the model was given, not proof the answer is supported by them, and retrieved text may carry an instruction, so the client must treat it as untrusted.
+**Limits:** local stdio only, read-only, not deployed, no rate limiting. It never ran in Claude Desktop or Claude Code. I used the SDK's client and a raw JSON-RPC session. Citations are the chunks the model was given. They are not proof the answer is supported by them. Retrieved text may carry an instruction. The client must treat it as untrusted.
 
 ## Agent skill
 
-[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill that tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill, and tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)). Hermes Agent runs both too ([notes](docs/hermes-agent.md)).
+[`skills/querying-knowledge-base/`](skills/querying-knowledge-base/SKILL.md) is an Agent Skill. It tells an agent when to search or ask, how to cite and how to recover when `ask_question` fails. Copy the folder to your client's skills directory (Claude Code: `.claude/skills/`). Its scenarios were written before the skill. Tests replay their tool calls against the server ([details](docs/evaluation.md#agent-skill)). Hermes Agent runs both too ([notes](docs/hermes-agent.md)).
 
 ## Vertex AI Gemini provider
 
-`LLM_PROVIDER=vertex` plus `VERTEX_CREDENTIALS_FILE` makes a Gemini model on Vertex AI answer first, with Ollama and Groq behind it. [`vertex.py`](backend/app/services/vertex.py) signs the RS256 assertion, caches the access token, calls `generateContent` and `streamGenerateContent`, retries 429 and 5xx and honours `Retry-After`, and raises a named error for a 4xx or blocked reply.
+Set `LLM_PROVIDER=vertex` and `VERTEX_CREDENTIALS_FILE` and a Gemini model on Vertex AI answers first. Ollama and Groq sit behind it. [`vertex.py`](backend/app/services/vertex.py) signs the RS256 assertion and caches the access token. It calls `generateContent` and `streamGenerateContent`. It retries 429 and 5xx and honours `Retry-After`. It raises a named error for a 4xx or blocked reply.
 
-**Built and tested against a stand-in server** I wrote from the Google pages saved in [`docs/vendor-contract/vertex-ai/`](docs/vendor-contract/vertex-ai/README.md): its tests and a guard-removal check run in CI ([details and run output](docs/vertex-provider.md)).
+**Built and tested against a stand-in server.** I wrote it from the Google pages saved in [`docs/vendor-contract/vertex-ai/`](docs/vendor-contract/vertex-ai/README.md). Its tests and a guard-removal check run in CI ([details and run output](docs/vertex-provider.md)).
 
 ## Architecture
 
-The diagram and the ingestion and query flow are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. The streaming and OpenAI-compatible endpoints are in [docs/reference.md](docs/reference.md).
+The diagram and the ingestion and query flow are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns. So BM25 is a keyword-agreement bonus, not a normalised score. The streaming and OpenAI-compatible endpoints are in [docs/reference.md](docs/reference.md).
 
 ## Run it
 
-You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch and the first backend start downloads the all-MiniLM-L6-v2 model. The commands use `llama3`; the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
+You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled. The local path needs no account and no API key. `pip install` pulls torch. The first backend start downloads the all-MiniLM-L6-v2 model. The commands use `llama3`. The recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
 
 ```bash
 docker run -d --name rag-qdrant -p 6333:6333 qdrant/qdrant && ollama pull llama3
@@ -131,14 +131,14 @@ pip install -r requirements-mcp.txt                  # the MCP server tests need
 python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 ```
 
-None of these needs a running service, a model download, a key or a network; run the pytest commands separately, as CI does. A test checks the corpus, question and table counts against a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
+None of these needs a running service, a model download, a key or a network. Run the pytest commands separately, as CI does. A test checks the corpus, question and table counts against a fresh run. Baseline failures, skipped files, counts and CI timings: [docs/evaluation.md](docs/evaluation.md#running-the-tests).
 
 ## Next steps
 
-- The corpus is small and the questions were written from it, which gives wide intervals, so this is a regression check that pins behaviour. A larger corpus is the next step for comparing hybrid against vector.
-- BM25 next: lowercasing, stripping punctuation and returning nothing when no term matches, since the flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
+- The corpus is small and the questions were written from it. That gives wide intervals. So this is a regression check that pins behaviour. A larger corpus is the next step for comparing hybrid against vector.
+- BM25 is next: lowercasing, stripping punctuation and returning nothing when no term matches. The flat 0.15 bonus can go to a chunk with no keyword overlap ([detail](docs/evaluation.md#known-limits-of-the-retrieval-code)).
 - The fallback counter is read by the evaluation; the API routes do not expose it yet.
-- Cross-encoder reranking works locally, and measuring it is next. HyDE and multi-query exist as library functions, ready to become API routes and be evaluated.
+- Cross-encoder reranking works locally. Measuring it is next. HyDE and multi-query exist as library functions. They are ready to become API routes and be evaluated.
 - Smaller items to tidy are listed in [docs/reference.md](docs/reference.md#known-issues).
 
 ## Stack
