@@ -194,3 +194,17 @@ def test_an_error_nobody_planned_for_ends_the_run_as_failed_and_is_still_raised(
     [folder] = list((spool / "runs").iterdir())
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["state"] == "failed" and manifest["error"]["reason"] == "RuntimeError: the disk is full"
+
+
+def test_a_submit_still_returns_the_run_id_when_the_run_folder_belongs_to_the_worker(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.workflows import trigger
+
+    monkeypatch.setattr(ingest.ingest_archive, "run_no_wait", lambda payload: SimpleNamespace(workflow_run_id=RUN))
+
+    class RootOwned(RunStore):
+        def start(self, *args, **kwargs):
+            raise PermissionError("the folder was made by the worker, which runs as root in its container")
+
+    assert trigger.submit_archive("/spool/inbox/x.zip", RootOwned(tmp_path)) == RUN

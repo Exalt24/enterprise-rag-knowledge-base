@@ -129,7 +129,7 @@ def stack(tmp_path_factory, request):
         if request.session.testsfailed:  # keep what the containers said, for the CI step that prints it
             logs = compose("--profile", "worker", "logs", "--tail", "300", env=env, check=False).stdout
             (BACKEND / "hatchet-integration-logs.txt").write_text(logs, encoding="utf-8")
-        compose("down", "-v", "--remove-orphans", env=env, check=False)
+        compose("--profile", "worker", "down", "-v", "--remove-orphans", env=env, check=False)  # the worker sits behind a profile, so down must name it
 
 
 def archive(stack, name, files=FILES, plain=False, seed=1):

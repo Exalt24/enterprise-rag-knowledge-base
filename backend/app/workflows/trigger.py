@@ -19,7 +19,10 @@ def submit_archive(zip_path, store: RunStore) -> str:
 
     reference = ingest_archive.run_no_wait(ArchiveInput(zip_path=str(zip_path)))
     run_id = reference.workflow_run_id
-    store.start(run_id, Path(str(zip_path)).name, state="queued", keep_existing=True)
+    try:
+        store.start(run_id, Path(str(zip_path)).name, state="queued", keep_existing=True)
+    except OSError:
+        pass  # the worker writes the manifest itself, and the run folder may already belong to the user the worker runs as
     return run_id
 
 
