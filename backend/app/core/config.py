@@ -184,6 +184,33 @@ class Settings(BaseSettings):
         )
     )
 
+    # Archive ingestion (app/workflows). These are the caps archive_guard.py enforces before anything is unpacked.
+    archive_max_files: int = Field(
+        default=5000,
+        ge=1,
+        description="Most files one zip archive may hold. A larger archive is refused whole.",
+    )
+    archive_max_total_mb: int = Field(
+        default=1024,
+        ge=1,
+        description=(
+            "Most the entries of one zip may add up to once unpacked, read from the zip's own file table before "
+            "anything is written. A larger archive is refused whole, which is the zip bomb guard."
+        ),
+    )
+    archive_max_upload_mb: int = Field(
+        default=512,
+        ge=1,
+        description="Largest zip POST /api/ingest/archive accepts, as uploaded (compressed).",
+    )
+    ingest_spool_dir: str = Field(
+        default="data/ingest",
+        description=(
+            "Where archive uploads, unpacked files and per run status files live. The API process and the Hatchet "
+            "worker must see the same folder (one machine, or one shared volume)."
+        ),
+    )
+
     # Redis Connection Pool
     redis_max_connections: int = Field(
         default=10,

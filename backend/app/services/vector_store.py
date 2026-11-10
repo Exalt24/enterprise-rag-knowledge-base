@@ -20,7 +20,7 @@ Using Qdrant Cloud because:
 from typing import List, Optional, Dict, Any
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, Range, VectorParams
 from langchain_core.documents import Document
 from app.core.config import settings
 
@@ -107,6 +107,7 @@ class VectorStoreService:
                 collection_name=settings.qdrant_collection,
                 embedding=embeddings
             )
+            self._ensure_payload_indexes()
 
             type(self)._init_error = None
             print(f"[OK] Qdrant vector store ready!")
@@ -118,6 +119,14 @@ class VectorStoreService:
             print(f"[!] Qdrant unavailable, starting in DEGRADED mode: {self._init_error}")
             print("[!] Retrieval endpoints will return 503 until the vector store is reachable.")
             return False
+
+    def _ensure_payload_indexes(self) -> None:
+        """Index the two fields the chunk lookups filter on. Best effort: a failure only makes those lookups slower."""
+        for field, schema in (("metadata.doc_id", PayloadSchemaType.KEYWORD), ("metadata.chunk_seq", PayloadSchemaType.INTEGER)):
+            try:
+                self._client.create_payload_index(settings.qdrant_collection, field_name=field, field_schema=schema)
+            except Exception as error:
+                print(f"[i] Payload index on {field} not created: {error}")
 
     @property
     def is_available(self) -> bool:
@@ -143,12 +152,14 @@ class VectorStoreService:
                 f"Vector store unavailable: {self._init_error}"
             )
 
-    def add_documents(self, documents: List[Document]) -> List[str]:
+    def add_documents(self, documents: List[Document], ids: Optional[List[str]] = None) -> List[str]:
         """
         Add documents to Qdrant.
 
         Args:
             documents: List of Document objects (already chunked!)
+            ids: Optional point ids, one per document. With ids, writing a chunk again replaces it, which is what
+                 the archive workflow relies on to be safe to rerun. Without them each call adds new points.
 
         Returns:
             List of document IDs
@@ -158,6 +169,8 @@ class VectorStoreService:
         self.require()
         if not documents:
             return []
+        if ids is not None and len(ids) != len(documents):
+            raise ValueError(f"{len(ids)} ids for {len(documents)} documents")
 
         print(f"[i] Adding {len(documents)} documents to Qdrant...")
 
@@ -166,16 +179,78 @@ class VectorStoreService:
         # production instance on a 32KB markdown file (~70 chunks). Batching bounds peak
         # memory to roughly one batch regardless of document size, so ingestion scales with
         # the file instead of falling over at a cliff.
-        ids: List[str] = []
+        point_ids = ids
+        stored: List[str] = []
         total = len(documents)
         for start in range(0, total, settings.ingest_batch_size):
             batch = documents[start:start + settings.ingest_batch_size]
-            ids.extend(self._vectorstore.add_documents(batch))
+            # Pass ids only when there are some: an explicit ids=None would make langchain ignore the ids a Document
+            # carries itself (the evaluation's chunks have them, so their order in the index is stable).
+            extra = {} if point_ids is None else {"ids": point_ids[start:start + settings.ingest_batch_size]}
+            stored.extend(self._vectorstore.add_documents(batch, **extra))
             print(f"[i]   {min(start + len(batch), total)}/{total} chunks stored")
 
-        print(f"[OK] Added {len(ids)} documents!")
+        print(f"[OK] Added {len(stored)} documents!")
 
-        return ids
+        return stored
+
+    def _doc_filter(self, doc_id: str, seq_range: Optional[tuple] = None) -> Filter:
+        """Filter on the doc_id written at ingestion, and on a chunk_seq range when one is given."""
+        must = [FieldCondition(key="metadata.doc_id", match=MatchValue(value=doc_id))]
+        if seq_range is not None:
+            must.append(FieldCondition(key="metadata.chunk_seq", range=Range(gte=seq_range[0], lte=seq_range[1])))
+        return Filter(must=must)
+
+    def indexed_chunk_info(self, doc_id: str) -> tuple:
+        """(stored chunk count, chunks the file produced) for a document id; (0, None) when nothing is stored.
+
+        The second value is the doc_chunks_total written at ingestion. A file is indexed when the first number has
+        reached it, so a crash between two batches leaves a file the next run finishes.
+        """
+        self.require()
+        found = self._client.count(
+            collection_name=settings.qdrant_collection, count_filter=self._doc_filter(doc_id), exact=True
+        ).count
+        if not found:
+            return 0, None
+        points, _ = self._client.scroll(
+            collection_name=settings.qdrant_collection,
+            scroll_filter=self._doc_filter(doc_id),
+            limit=1,
+            with_payload=["metadata.doc_chunks_total"],
+            with_vectors=False,
+        )
+        total = ((points[0].payload or {}).get("metadata") or {}).get("doc_chunks_total") if points else None
+        return found, total if isinstance(total, int) else None
+
+    def is_indexed(self, doc_id: str) -> bool:
+        """True when every chunk of the file with this document id is stored."""
+        found, total = self.indexed_chunk_info(doc_id)
+        return found > 0 and total is not None and found >= total
+
+    def get_chunk_window(self, doc_id: str, chunk_seq: int, context: int) -> List[Document]:
+        """The chunk with this position and up to `context` chunks on each side, in file order.
+
+        Empty when the chunk does not exist. Chunks come from the configured collection only.
+        """
+        self.require()
+        low, high = max(0, chunk_seq - context), chunk_seq + context
+        points, _ = self._client.scroll(
+            collection_name=settings.qdrant_collection,
+            scroll_filter=self._doc_filter(doc_id, (low, high)),
+            limit=(high - low + 1) * 2,  # room for a second copy of a chunk that was uploaded twice
+            with_payload=True,
+            with_vectors=False,
+        )
+        by_seq: Dict[int, Document] = {}
+        for point in points:
+            payload = point.payload or {}
+            metadata = payload.get("metadata", {})
+            seq = metadata.get("chunk_seq")
+            if isinstance(seq, int):  # a file uploaded twice has two copies of a chunk; they are the same text, one is kept
+                by_seq[seq] = Document(page_content=payload.get("page_content", ""), metadata=metadata)
+        found = [by_seq[seq] for seq in sorted(by_seq)]
+        return found if chunk_seq in by_seq else []
 
     def search(
         self,

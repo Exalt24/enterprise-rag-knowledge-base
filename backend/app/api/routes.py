@@ -8,7 +8,9 @@ REST endpoints for the RAG system:
 - GET /health - Health check
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import Path as PathParam
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -18,6 +20,8 @@ import shutil
 import time
 import uuid
 from app.api.schemas import (
+    ArchiveRunStatus,
+    ArchiveSubmitResponse,
     QueryRequest,
     QueryResponse,
     IngestResponse,
@@ -211,6 +215,8 @@ async def query_knowledge_base(request: QueryRequest):
                         file_name=source_dict['file_name'],
                         page=source_dict.get('page'),
                         location=source_dict.get('location'),
+                        doc_id=source_dict.get('doc_id'),
+                        chunk_id=source_dict.get('chunk_id'),
                         content_preview=source_dict['content_preview'],
                         relevance_score=None
                     ))
@@ -245,6 +251,8 @@ async def query_knowledge_base(request: QueryRequest):
                     file_name=source_dict["file_name"],
                     page=source_dict.get("page"),
                     location=source_dict.get("location"),
+                    doc_id=source_dict.get("doc_id"),
+                    chunk_id=source_dict.get("chunk_id"),
                     content_preview=source_dict["content_preview"],
                     relevance_score=score
                 ))
@@ -338,6 +346,66 @@ async def ingest_document(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+# =============================================================================
+# Archive Ingestion - Hatchet workflows (app/workflows, docs/ingestion.md)
+# =============================================================================
+
+@router.post("/ingest/archive", response_model=ArchiveSubmitResponse, status_code=202)
+async def ingest_archive_upload(file: UploadFile = File(...)):
+    """
+    Upload a zip of documents and start the Hatchet ingest_archive workflow for it.
+
+    Returns at once with a run id; GET /ingest/{run_id} shows the result table while it runs and after. Needs a Hatchet
+    worker and HATCHET_CLIENT_TOKEN (see docs/ingestion.md). The single file upload at POST /ingest is unchanged.
+    """
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Upload a .zip file")
+    from app.workflows.hatchet_client import is_configured
+
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Archive ingestion is not set up: HATCHET_CLIENT_TOKEN is not set. See docs/ingestion.md.")
+
+    spool = Path(settings.ingest_spool_dir).resolve()
+    (spool / "uploads").mkdir(parents=True, exist_ok=True)
+    target = spool / "uploads" / f"{uuid.uuid4().hex}.zip"
+    limit = settings.archive_max_upload_mb * 1024 * 1024
+    written = 0
+    with open(target, "wb") as out:
+        while block := await file.read(1024 * 1024):
+            written += len(block)
+            if written > limit:
+                out.close()
+                target.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail=f"The zip is over the {settings.archive_max_upload_mb} MB upload cap")
+            out.write(block)
+    try:
+        from app.workflows.run_store import RunStore
+        from app.workflows.trigger import submit_archive
+
+        run_id = await run_in_threadpool(submit_archive, str(target), RunStore(spool))
+    except Exception as error:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=503, detail=f"Could not start the workflow: {type(error).__name__}: {error}")
+    return ArchiveSubmitResponse(run_id=run_id, status_url=f"/api/ingest/{run_id}")
+
+
+@router.get("/ingest/{run_id}", response_model=ArchiveRunStatus)
+async def get_archive_run(run_id: str):
+    """
+    The result table of an archive run: one row per file (ingested, skipped_duplicate or failed with a reason), the
+    counts, and the state of the run. A refused archive has state rejected and an error code instead of rows.
+    """
+    from app.workflows.run_store import InvalidRunId, RunStore
+
+    try:
+        status = RunStore(Path(settings.ingest_spool_dir).resolve()).load(run_id)
+    except InvalidRunId:
+        status = None
+    if status is None:
+        raise HTTPException(status_code=404, detail="No such run")
+    return status
 
 
 # =============================================================================
@@ -454,7 +522,9 @@ async def health_check():
 # =============================================================================
 
 from app.services.file_management import file_management
+from app.services.source_view import DEFAULT_CONTEXT, MAX_CONTEXT, build_chunk_view
 from app.api.schemas import (
+    ChunkViewResponse,
     DocumentInfoSchema,
     ListDocumentsResponse,
     DeleteDocumentResponse
@@ -495,6 +565,26 @@ async def list_documents():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
+
+
+@router.get("/documents/{doc_id}/chunks/{chunk_id}", response_model=ChunkViewResponse)
+async def get_document_chunk(
+    doc_id: str,
+    chunk_id: int = PathParam(..., ge=0),
+    context: int = Query(DEFAULT_CONTEXT, ge=0, le=MAX_CONTEXT),
+):
+    """
+    The cited passage of a document with the chunks around it, for the reviewer's source view.
+
+    `doc_id` and `chunk_id` come from the citation of an answer (Source.doc_id, Source.chunk_id). `context` is how many
+    chunks to return on each side. Chunks are read from the configured collection only, the same one every other
+    route uses.
+    """
+    window = vector_store.get_chunk_window(doc_id, chunk_id, context)
+    view = build_chunk_view(window, doc_id, chunk_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="No such chunk")
+    return view
 
 
 @router.delete("/documents/{file_name}", response_model=DeleteDocumentResponse)

@@ -178,6 +178,8 @@ class RAGService:
                 "file_name": doc.metadata.get("file_name", "unknown"),
                 "page": doc.metadata.get("page"),
                 "location": doc.metadata.get("location"),
+                "doc_id": doc.metadata.get("doc_id"),
+                "chunk_id": doc.metadata.get("chunk_seq"),
                 "content_preview": doc.page_content[:100] + "..."
             })
 
@@ -262,6 +264,8 @@ class RAGService:
                 "file_name": doc.metadata.get("file_name", "unknown"),
                 "page": doc.metadata.get("page"),
                 "location": doc.metadata.get("location"),
+                "doc_id": doc.metadata.get("doc_id"),
+                "chunk_id": doc.metadata.get("chunk_seq"),
                 "content_preview": doc.page_content[:100] + "..."
             }
             for doc in documents

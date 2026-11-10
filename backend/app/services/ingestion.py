@@ -14,6 +14,7 @@ from typing import List, Dict, Any
 from pathlib import Path
 from app.services.document_parser import DocumentParser
 from app.services.chunking import TextChunker
+from app.services.chunk_identity import annotate_chunks, compute_doc_id
 from app.services.vector_store import vector_store
 
 
@@ -59,6 +60,8 @@ class IngestionService:
         # Step 2: Chunk documents
         print("[2/4] Chunking text...")
         chunked_docs = self.chunker.chunk_documents(documents)
+        # Name every chunk (document id, position in the file) so a citation can open it again in the source view.
+        annotate_chunks(chunked_docs, compute_doc_id(file_path))
         print(f"[OK] Created {len(chunked_docs)} chunks")
 
         # Step 3: Add to vector database (embeddings generated automatically)
