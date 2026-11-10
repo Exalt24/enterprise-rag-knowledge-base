@@ -18,8 +18,28 @@ export interface Source {
   file_name: string;
   page?: number;
   location?: string;
+  // Set for files ingested since the source view was added; older chunks have neither, so they cannot be opened.
+  doc_id?: string | null;
+  chunk_id?: number | null;
   content_preview: string;
   relevance_score?: number;
+}
+
+export interface ChunkPassage {
+  chunk_id: number;
+  text: string;
+  page: number | null;
+  location: { kind: "page" | "cells" | "chunk"; label: string };
+}
+
+export interface ChunkView {
+  doc_id: string;
+  file_name: string;
+  file_type: string | null;
+  total_chunks: number | null;
+  chunk: ChunkPassage;
+  before: ChunkPassage[];
+  after: ChunkPassage[];
 }
 
 export interface QueryResponse {
@@ -118,6 +138,23 @@ export const api = {
 
     if (!response.ok) {
       throw new Error(`Query failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  /** The cited passage with the chunks around it, from GET /api/documents/{doc_id}/chunks/{chunk_id}. */
+  async getChunk(docId: string, chunkId: number, context = 2): Promise<ChunkView> {
+    const response = await fetch(
+      `${API_BASE_URL}/documents/${encodeURIComponent(docId)}/chunks/${chunkId}?context=${context}`
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 404
+          ? "This passage is no longer in the knowledge base."
+          : `Could not load the passage: ${response.statusText}`
+      );
     }
 
     return response.json();

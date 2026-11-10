@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { api, type Source } from "@/lib/api";
+import { SourcePanel } from "@/components/SourcePanel";
 
 interface Message {
   type: "user" | "assistant";
@@ -19,6 +20,7 @@ export function ChatInterface() {
   const [useReranking, setUseReranking] = useState(false);
   const [useStream, setUseStream] = useState(true);
   const [conversationId] = useState(() => `conv_${Date.now()}`);
+  const [openSource, setOpenSource] = useState<Source | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Check if running on production (Render has memory limits)
@@ -248,27 +250,46 @@ export function ChatInterface() {
                     <p className="text-xs text-slate-500 uppercase tracking-wide">
                       Sources ({message.sources.length})
                     </p>
-                    {message.sources.map((source, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs bg-slate-800/70 rounded px-3 py-2 text-slate-300 border border-slate-700"
-                      >
-                        <div className="flex justify-between items-start">
-                          <span className="font-medium">{source.file_name}</span>
-                          {source.relevance_score !== undefined && source.relevance_score !== null && (
-                            <span className="text-slate-500 ml-2">
-                              {source.relevance_score.toFixed(3)}
-                            </span>
+                    {message.sources.map((source, idx) => {
+                      const canOpen = typeof source.doc_id === "string" && typeof source.chunk_id === "number";
+                      const body = (
+                        <>
+                          <div className="flex justify-between items-start">
+                            <span className="font-medium">{source.file_name}</span>
+                            {source.relevance_score !== undefined && source.relevance_score !== null && (
+                              <span className="text-slate-500 ml-2">
+                                {source.relevance_score.toFixed(3)}
+                              </span>
+                            )}
+                          </div>
+                          {source.page && (
+                            <p className="text-slate-500 mt-1">Page {source.page}</p>
                           )}
+                          {source.location && (
+                            <p className="text-slate-500 mt-1">{source.location}</p>
+                          )}
+                        </>
+                      );
+                      const box = "text-xs bg-slate-800/70 rounded px-3 py-2 text-slate-300 border border-slate-700";
+                      return canOpen ? (
+                        <button
+                          key={idx}
+                          type="button"
+                          data-testid="citation"
+                          data-doc-id={source.doc_id ?? undefined}
+                          data-chunk-id={source.chunk_id ?? undefined}
+                          onClick={() => setOpenSource(source)}
+                          title="Open this passage in its document"
+                          className={`${box} block w-full text-left cursor-pointer hover:border-blue-500 hover:bg-slate-800`}
+                        >
+                          {body}
+                        </button>
+                      ) : (
+                        <div key={idx} data-testid="citation-unlinked" className={box}>
+                          {body}
                         </div>
-                        {source.page && (
-                          <p className="text-slate-500 mt-1">Page {source.page}</p>
-                        )}
-                        {source.location && (
-                          <p className="text-slate-500 mt-1">{source.location}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -314,6 +335,16 @@ export function ChatInterface() {
             : "Conversation memory enabled - ask follow-up questions!"}
         </p>
       </form>
+
+      {openSource && typeof openSource.doc_id === "string" && typeof openSource.chunk_id === "number" && (
+        <SourcePanel
+          key={`${openSource.doc_id}:${openSource.chunk_id}`}
+          docId={openSource.doc_id}
+          chunkId={openSource.chunk_id}
+          fileName={openSource.file_name}
+          onClose={() => setOpenSource(null)}
+        />
+      )}
     </div>
   );
 }
