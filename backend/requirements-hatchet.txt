@@ -1,0 +1,5 @@
+# The Hatchet Python SDK, for the archive ingestion workflows in app/workflows/ (docs/ingestion.md).
+# Install it on top of the backend's own requirements (requirements.txt locally, requirements-ci.txt in CI).
+# Pinned to 1.45.1, the release the workflows were written and run against (checked on 2026-11-10). The worker side of
+# the SDK needs a POSIX system (it registers SIGQUIT), so on Windows run the worker in Docker (docker-compose.hatchet.yml).
+hatchet-sdk==1.45.1

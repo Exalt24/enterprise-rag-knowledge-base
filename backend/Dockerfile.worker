@@ -1,0 +1,22 @@
+# Hatchet ingestion worker image (docs/ingestion.md). Slim on purpose: the Render requirements set plus the Hatchet SDK,
+# fastembed for embeddings (ONNX, no torch). The SDK's worker needs a POSIX system, so this is also how the worker runs
+# from a Windows machine.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-render.txt requirements-hatchet.txt ./
+RUN pip install --no-cache-dir -r requirements-render.txt -r requirements-hatchet.txt
+
+COPY app /app/app
+# eval/ is here only for the hashing test double that the integration test switches on (app/workflows/testing_hooks.py)
+COPY eval /app/eval
+
+ENV PYTHONUNBUFFERED=1 \
+    RENDER=true \
+    FASTEMBED_CACHE_PATH=/opt/fastembed \
+    HATCHET_CLIENT_TLS_STRATEGY=none
+
+CMD ["python", "-m", "app.workflows", "worker"]

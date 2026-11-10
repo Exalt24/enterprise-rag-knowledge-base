@@ -1,0 +1,96 @@
+# Hatchet ingestion stack: Postgres, hatchet-lite (engine, API and dashboard in one container) and Qdrant.
+#
+# This is the compose file from the Hatchet self-hosting page for hatchet-lite
+# (https://docs.hatchet.run/self-hosting/hatchet-lite) with the image tags pinned and a Qdrant service added.
+# hatchet-lite is built for development and low volume, which is what the ingestion proof needs.
+#
+#   docker compose -f docker-compose.hatchet.yml up -d
+#   docker compose -f docker-compose.hatchet.yml exec hatchet-lite /hatchet-admin token create --config /config --tenant-id 707d0855-80ab-4e1f-a156-f1c4546cbf52
+#   docker compose -f docker-compose.hatchet.yml down -v
+#
+# Dashboard: http://localhost:8888 (admin@example.com / Admin123!! is the lite image's seeded login, local use only).
+name: rag-hatchet
+services:
+  postgres:
+    image: postgres:15.6
+    command: postgres -c 'max_connections=200'
+    environment:
+      POSTGRES_USER: hatchet
+      POSTGRES_PASSWORD: hatchet
+      POSTGRES_DB: hatchet
+    volumes:
+      - hatchet_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d hatchet -U hatchet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  hatchet-lite:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:v0.114.2
+    ports:
+      - "8888:8888"
+      - "7077:7077"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+      SERVER_AUTH_COOKIE_DOMAIN: localhost
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_BROADCAST_ADDRESS: localhost:7077
+      SERVER_GRPC_PORT: "7077"
+      SERVER_URL: http://localhost:8888
+      SERVER_AUTH_SET_EMAIL_VERIFIED: "t"
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: localhost:7077
+    volumes:
+      - hatchet_lite_config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8888/api/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # The ingestion worker. Not started by a plain `up`: it needs HATCHET_CLIENT_TOKEN first, so it sits behind a profile.
+  #   export HATCHET_CLIENT_TOKEN=<the token printed above>
+  #   docker compose -f docker-compose.hatchet.yml --profile worker up -d --build worker
+  # The Hatchet SDK's worker needs a POSIX system, so this container is also how the worker runs from Windows.
+  # On Linux or macOS `python -m app.workflows worker` from backend/ does the same without Docker.
+  worker:
+    profiles: ["worker"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    depends_on:
+      - hatchet-lite
+      - qdrant
+    environment:
+      HATCHET_CLIENT_TOKEN: ${HATCHET_CLIENT_TOKEN:-}
+      HATCHET_CLIENT_TLS_STRATEGY: none
+      HATCHET_CLIENT_HOST_PORT: hatchet-lite:7077
+      HATCHET_CLIENT_SERVER_URL: http://hatchet-lite:8888
+      QDRANT_URL: http://qdrant:6333
+      INGEST_SPOOL_DIR: /spool
+      RAG_INGEST_TEST_MODE: ${RAG_INGEST_TEST_MODE:-}
+      RAG_INGEST_FAULT_FILE: ${RAG_INGEST_FAULT_FILE:-}
+    volumes:
+      - ${INGEST_SPOOL_HOST:-./ingest-spool}:/spool
+      - ${INGEST_DATA_HOST:-./ingest-data}:/data:ro
+      - fastembed_cache:/opt/fastembed
+
+volumes:
+  hatchet_postgres_data:
+  hatchet_lite_config:
+  qdrant_data:
+  fastembed_cache:

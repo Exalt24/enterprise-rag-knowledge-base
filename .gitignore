@@ -123,3 +123,9 @@ yarn-error.log*
 # =============================================================================
 CLAUDE.md
 .claude
+ingest-spool/
+ingest-data/
+hatchet-integration-logs.txt
+frontend/test-results/
+frontend/playwright-report/
+frontend/AGENTS.md
