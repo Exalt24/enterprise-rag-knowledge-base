@@ -33,6 +33,7 @@ jobs:
             backend/requirements-ci.txt
             backend/requirements-render.txt
             backend/requirements-mcp.txt
+            backend/requirements-hatchet.txt
       # requirements-ci.txt is the Render set plus pytest: no torch and no CUDA wheels, so the install stays far
       # inside the 15 minute timeout. requirements.txt is a Windows pip freeze that pulls the CUDA torch wheel.
       - name: Install
@@ -46,6 +47,13 @@ jobs:
           start=$(date +%s)
           pip install -r requirements-mcp.txt
           echo "MCP SDK install took $(( $(date +%s) - start )) seconds" | tee -a "$GITHUB_STEP_SUMMARY"
+      # The Hatchet SDK is only imported by app/workflows/ingest.py; the task definition tests and the mutants that break
+      # them need it. The archive rules themselves (pipeline.py, archive_guard.py) run without it.
+      - name: Install Hatchet SDK
+        run: |
+          start=$(date +%s)
+          pip install -r requirements-hatchet.txt
+          echo "Hatchet SDK install took $(( $(date +%s) - start )) seconds" | tee -a "$GITHUB_STEP_SUMMARY"
       # Pinned test files only. The other files in tests/ need a running backend on :8001 or Qdrant and an LLM,
       # and backend/test_setup.py is a script that starts services at import and calls exit(1); a bare
       # `pytest` collects all of them and errors, which is why this step used to be dropped. pytest.ini
@@ -74,10 +82,100 @@ jobs:
       # mutation check below breaks the loader one guard at a time and runs this file against each copy.
       - name: Document parser tests
         run: python -m pytest tests/test_document_parser_*.py
+      # Archive ingestion and the reviewer source view: every guard of the zip check, the rules of the run (idempotency,
+      # a rerun after a crash, one bad file not stopping the rest, retries only for outages), the two archive routes, the
+      # chunk lookup, and the Hatchet task definitions through the SDK's mock_run. The in-memory index and the hashing
+      # embedder stand in for Qdrant and the model; nothing here needs Docker or a network. Its own invocation.
+      - name: Archive ingestion and source view tests
+        run: python -m pytest tests/test_archive_guard.py tests/test_archive_pipeline.py tests/test_archive_api.py tests/test_source_view.py tests/test_hatchet_tasks.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
+      # The ingestion mutants run in their own job below, so this one keeps its old length.
       - name: Mutation check
-        run: python eval/mutation_check.py
+        run: python eval/mutation_check.py --skip-ingest
+  ingestion-mutation-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RENDER: "true"
+    defaults:
+      run:
+        working-directory: "backend"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-ci.txt
+            backend/requirements-render.txt
+            backend/requirements-hatchet.txt
+      - name: Install
+        run: pip install -r requirements-ci.txt -r requirements-hatchet.txt
+      # Breaks each guard of the archive zip check, the archive rules, the status files, the chunk lookup, the two archive
+      # routes and the Hatchet task settings, one at a time, in a copy of the code, and requires a test failure for every
+      # one. Last line: "N of N mutants caught".
+      - name: Ingestion mutation check
+        run: python eval/mutation_check.py --only-ingest
+  hatchet-integration:
+    # Real hatchet-lite, Postgres and Qdrant containers and a real worker container, driven through docker compose.
+    # ubuntu only, on every push to main and every pull request, as the other jobs. The test builds the worker image
+    # and waits out two retry backoffs, so it takes a few minutes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: "backend"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements-ci.txt
+            backend/requirements-hatchet.txt
+      - name: Install
+        run: pip install -r requirements-ci.txt -r requirements-hatchet.txt
+      - name: Hatchet ingestion against hatchet-lite
+        env:
+          RENDER: "true"
+        run: python -m pytest -m hatchet tests/test_hatchet_integration.py -v
+      - name: Container logs after a failure
+        if: failure()
+        run: cat hatchet-integration-logs.txt || true
+  source-view-e2e:
+    # The reviewer source view in a real browser: the real front end and the real API over the demo corpus.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: "frontend/package-lock.json"
+      - name: Install the backend
+        run: pip install -r backend/requirements-ci.txt
+        env:
+          RENDER: "true"
+      - name: Install the front end and the browser
+        working-directory: "frontend"
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Source view test
+        working-directory: "frontend"
+        env:
+          RENDER: "true"
+          E2E_PYTHON: python
+        run: npx playwright test
   node-frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
