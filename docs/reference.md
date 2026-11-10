@@ -79,6 +79,8 @@ Upload documents in the web UI (PDF, DOCX, XLSX, TXT, MD) and ask questions in t
 - `POST /api/query/stream`, SSE and stateless
 - `POST /api/v1/chat/completions`, OpenAI-compatible
 - `POST /api/ingest`, `GET /api/stats`, `GET /api/documents`, `DELETE /api/documents/{name}`, `GET /api/health`
+- `POST /api/ingest/archive` and `GET /api/ingest/{run_id}`: a zip of documents through the Hatchet workflow, and its result table ([ingestion.md](ingestion.md))
+- `GET /api/documents/{doc_id}/chunks/{chunk_id}?context=2`: a cited passage with the chunks around it ([source-view.md](source-view.md))
 
 ## Advanced usage
 
@@ -231,7 +233,10 @@ enterprise-rag-knowledge-base/
 │   │   │   ├── cache.py               # Redis and in-memory cache
 │   │   │   ├── conversation.py        # multi-turn memory
 │   │   │   ├── file_management.py
-│   │   │   └── ingestion.py
+│   │   │   ├── ingestion.py
+│   │   │   ├── chunk_identity.py      # doc_id, chunk_seq and the point ids that let a citation open one chunk
+│   │   │   └── source_view.py         # the reviewer source view response
+│   │   ├── workflows/                 # archive ingestion on Hatchet: guard, rules, status files, tasks (docs/ingestion.md)
 │   │   └── main.py
 │   ├── eval/                          # the rerunnable retrieval evaluation, its corpus and pinned baseline
 │   ├── mcp_server/                    # the read-only MCP server
@@ -239,6 +244,8 @@ enterprise-rag-knowledge-base/
 │   ├── requirements.txt               # full local set
 │   ├── requirements-ci.txt            # what CI installs: the deployed set plus pytest
 │   ├── requirements-mcp.txt           # the MCP SDK, pinned
+│   ├── requirements-hatchet.txt       # the Hatchet SDK, pinned
+│   ├── Dockerfile.worker              # the Hatchet ingestion worker image
 │   ├── requirements-render.txt        # deployed image, no torch
 │   ├── keep_alive.py                  # pings Qdrant and Redis so the free tiers are not reclaimed; run it by hand, no workflow does
 │   └── Dockerfile
@@ -328,7 +335,12 @@ VERTEX_SYSTEM_INSTRUCTION=...      # optional systemInstruction text
 VERTEX_API_BASE=http://127.0.0.1:8765   # override the service endpoint, for a stand-in server
 REDIS_URL=redis://localhost:6379   # cache and rate limiter
 CACHE_TTL=3600                     # cache lifetime in seconds
-MAX_FILE_SIZE_MB=10                # upload limit
+MAX_FILE_SIZE_MB=10                # upload limit, and the per file cap inside an archive
+ARCHIVE_MAX_FILES=5000             # most files one zip may hold
+ARCHIVE_MAX_TOTAL_MB=1024          # most a zip may unpack to, read from its file table
+ARCHIVE_MAX_UPLOAD_MB=512          # largest zip POST /api/ingest/archive accepts
+INGEST_SPOOL_DIR=data/ingest       # where archive uploads, unpacked files and run status live; the API and the worker must share it
+HATCHET_CLIENT_TOKEN=...           # needed by the worker and by POST /api/ingest/archive (docs/ingestion.md)
 REDIS_MAX_CONNECTIONS=10           # connection pool size
 ```
 

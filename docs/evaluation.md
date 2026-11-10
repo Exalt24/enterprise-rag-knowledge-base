@@ -66,7 +66,7 @@ The README has the three pytest commands. None of them needs a running service, 
 
 Timing from the first run on a cold pip cache, read from the job log (run 39863561524, 2026-10-22): install 31 seconds, whole job 146 seconds, against a 15 minute timeout. That run predates the MCP tests and their mutants; the current job takes about 5 minutes.
 
-The `python-backend` job runs on every push and installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py`, whose last line reads `N of N mutants caught`.
+The `python-backend` job runs on every push and installs `requirements-ci.txt` (the Render set plus pytest, no torch). It runs the stubbed ranking test, the evaluation tests and the MCP server tests as three separate pytest invocations (the MCP SDK is installed in its own step from `requirements-mcp.txt`), because `test_hybrid_ranking.py` replaces modules that fail to import with stubs for the whole process and the evaluation must run against the real ones. Then it runs `python eval/run_eval.py --check` and `python eval/mutation_check.py --skip-ingest`, whose last line reads `N of N mutants caught`. The same job runs the archive ingestion and source view tests (with the Hatchet SDK installed from `requirements-hatchet.txt`). Three more jobs run beside it on every push and pull request, all on Linux: `ingestion-mutation-check` (`python eval/mutation_check.py --only-ingest`), `hatchet-integration` (a real hatchet-lite, a worker and Qdrant in Docker) and `source-view-e2e` (Playwright against the real front end). [ingestion.md](ingestion.md) and [source-view.md](source-view.md) have the detail.
 
 ## Known limits of the retrieval code
 
@@ -93,6 +93,8 @@ Two behaviours of the BM25 branch showed up while building the evaluation and ar
 The server mutants need the SDK (`pip install -r requirements-mcp.txt`); `--skip-mcp` leaves them out.
 
 Most of these are caught by the generated class tests (`test_eval_baseline_changes.py`, `test_eval_fallback_cause.py`, `test_eval_readme_claims.py`, `test_eval_readme_counts.py`, `test_eval_docs_not_stale.py`, `test_eval_labels.py`), each of which builds its cases from a product of every field, exception, column or label kind, so a case nobody listed is covered too.
+
+**Ingestion mutants.** The archive guard, the archive rules, the status files, the chunk lookup, the two archive routes and the Hatchet task settings have their own mutants (`guard-*`, `pipeline-*`, `run-store-*`, `identity-*`, `store-*`, `view-*`, `route-*`, `hatchet-*`). Each one runs only the tests that guard it, and `python eval/mutation_check.py --only-ingest` runs them all (the `hatchet-*` ones need `requirements-hatchet.txt`; `--skip-hatchet` leaves them out). They are written with a few small helpers (drop an `if`, force its test, flip a comparison, drop a keyword) so a guard is one line, and `tests/test_eval_mutation_targets.py` checks on every run that each still finds exactly one place in the source. [ingestion.md](ingestion.md) lists the guards.
 
 ## MCP server
 

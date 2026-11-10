@@ -27,7 +27,11 @@ Upload, parse, chunk, embed, store.
 3. `embeddings.py` produces 384-dimension all-MiniLM-L6-v2 vectors, L2-normalised so that cosine similarity is a dot product.
 4. `vector_store.py` upserts into a Qdrant collection created with cosine distance. Ingestion embeds and upserts in batches (`INGEST_BATCH_SIZE`, default 16) to bound peak memory, so a large file cannot OOM a small instance.
 
-Uploads are capped at 10 MB, and the filename is reduced to its base name before it touches disk.
+Uploads are capped at 10 MB, and the filename is reduced to its base name before it touches disk. Every chunk also gets a `doc_id` (the SHA-256 of the file), a `chunk_seq` (its position in the whole file) and the file's chunk total, so a citation can name one chunk and the reviewer source view can open it ([source-view.md](source-view.md)).
+
+### Archives
+
+A zip of documents goes through a second door, `backend/app/workflows/`: a Hatchet workflow checks the archive (path traversal, file and size caps, extensions, nested archives), then runs parse, chunk and embed-and-upsert for each file as its own run, with the same parser, chunker and vector store as above. The file's SHA-256 decides whether it is already indexed, a bad file is recorded and not retried, and only an outage is retried. The rules are plain functions in `pipeline.py` and `archive_guard.py`; `ingest.py` is the thin Hatchet layer. [ingestion.md](ingestion.md) has the guards, the retry rules, the measured runs and the limits.
 
 ### Two embedding backends
 
@@ -82,7 +86,7 @@ For streaming, `generate_stream` buffers the first chunk before emitting anythin
 
 ## Testing
 
-CI (`.github/workflows/ci.yml`) runs on every push to main and on pull requests. Its Python job installs `requirements-ci.txt` and runs separate pytest invocations (the stubbed ranking test, the evaluation tests, and the MCP server and skill tests; separate because the ranking test stubs modules for the whole process), then `python eval/run_eval.py --check`, which compares a deterministic evaluation run with its pinned baseline, then `python eval/mutation_check.py`, which breaks the guarded code and these docs one way at a time and requires a test to fail each time. A front-end job lints and builds. None of it needs Qdrant, a model download or a key. The evaluation is a regression check on a small invented corpus, not a benchmark; [evaluation.md](evaluation.md) has the method, and a test checks every markdown page against a fresh run and against a list of claims that used to be true.
+CI (`.github/workflows/ci.yml`) runs on every push to main and on pull requests. Its Python job installs `requirements-ci.txt` and runs separate pytest invocations (the stubbed ranking test, the evaluation tests, and the MCP server and skill tests; separate because the ranking test stubs modules for the whole process), then `python eval/run_eval.py --check`, which compares a deterministic evaluation run with its pinned baseline, then `python eval/mutation_check.py`, which breaks the guarded code and these docs one way at a time and requires a test to fail each time. A front-end job lints and builds. None of that needs Qdrant, a model download or a key. The archive ingestion tests join the python job (they use the in-memory index and the hashing embedder too). Three Linux jobs sit beside it: the ingestion mutants, a real hatchet-lite with a worker in Docker (it starts its own Qdrant), and a Playwright test of the source view. The evaluation is a regression check on a small invented corpus, not a benchmark; [evaluation.md](evaluation.md) has the method, and a test checks every markdown page against a fresh run and against a list of claims that used to be true.
 
 The scripts in `backend/tests/` that talk to a running backend (the API endpoints, ingestion, the RAG query path, rate limiting, a RAG metrics script) and `eval_retrieval.py` are not in CI, and `pytest.ini` skips them. They are run by hand against a local backend. `eval_retrieval.py` is the hit@k script behind the earlier live-deployment measurement in [engineering-notes.md](engineering-notes.md#retrieval-accuracy); the rerunnable evaluation replaced it as the evidence.
 
@@ -93,3 +97,4 @@ The scripts in `backend/tests/` that talk to a running backend (the API endpoint
 - Replace the in-process conversation checkpointer with a Redis or Postgres one.
 - Run the live-backend scripts in a CI job against a Qdrant service container, so they stop depending on someone remembering to run them.
 - Run the skill's scenarios against a live agent, which nothing here has done.
+- Let the archive workflow share more than a folder with the API (an object store for the unpacked files), so the worker can run on another machine.
