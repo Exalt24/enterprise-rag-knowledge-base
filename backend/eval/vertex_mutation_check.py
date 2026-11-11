@@ -125,7 +125,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--only", action="append", default=[])
-    parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--jobs", type=int, default=max(2, (os.cpu_count() or 4) // 2))
     args = parser.parse_args()
     chosen = [m for m in MUTANTS if not args.only or m.name in args.only]
     if args.only and len(chosen) != len(set(args.only)):
