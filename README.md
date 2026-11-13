@@ -92,7 +92,7 @@ docker compose -f docker-compose.hatchet.yml --profile worker run --rm worker py
 
 The mixed archive holds a corrupt PDF, a password protected PDF, a fake workbook, a nested zip and a `.png`. Each failed with its own reason and every other file was stored. From submit to done the runs took 42.8, 9.1 and 484 seconds, since a run also waits to be scheduled. The rerun parsed only the three unreadable files again.
 
-**Limits:** not production. hatchet-lite is Hatchet's development image, this is one worker on one machine, and the API and worker share a spool folder. The SDK's worker needs POSIX, so on Windows it runs in Docker. Once a task sat queued for about four minutes until another run woke the scheduler (lite v0.114.2); I did not find why.
+**Limits:** built on hatchet-lite, Hatchet's development image, as one worker on one machine, and the API and worker share a spool folder. The SDK's worker needs POSIX, so on Windows it runs in Docker. Once a task sat queued for about four minutes until another run woke the scheduler (lite v0.114.2); I did not find why.
 
 ## Source view
 
