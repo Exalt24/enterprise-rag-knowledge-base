@@ -23,7 +23,8 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 APP = BACKEND / "app" / "compare"
 CK, PG, RQ, AP, RP, JD, API, CLI = (APP / n for n in ("check.py", "pages.py", "requirements.py", "approval.py", "report.py", "judge.py", "api.py", "__main__.py"))
-SUITE = ["tests/test_compare_check.py", "tests/test_compare_approval.py", "tests/test_compare_property.py"]
+QT, QCLI = BACKEND / "app" / "quote" / "quote.py", BACKEND / "app" / "quote" / "__main__.py"
+SUITE = ["tests/test_compare_check.py", "tests/test_compare_approval.py", "tests/test_compare_property.py", "tests/test_quote.py"]
 BASELINE_TIMEOUT_SECONDS = 240
 MUTANT_TIMEOUT_SECONDS = 180
 
@@ -169,11 +170,72 @@ MUTATIONS = [
      ["a_422_with_the_reason"], "a bad file is the caller's problem, not a 500"),
     (CLI, "strict never fails", [('return 1 if args.strict and report.to_dict()["summary"]["open_blocking"] else 0', "return 0")],
      ["command_line_compares"], "a pipeline needs the exit code"),
+    # ------------------------------------------------------------------ the quotation drafter (app/quote)
+    (QT, "rounding not half up", [("return value.quantize(CENT, rounding=ROUND_HALF_UP)", "return value.quantize(CENT)")],
+     ["quantity_times_rate", "match_an_oracle"], "a cent of rounding is a figure on a client's quote"),
+    (QT, "line amount not rounded", [("money(r.quantity * service.rate), r.source))", "r.quantity * service.rate, r.source))")],
+     ["quantity_times_rate", "match_an_oracle"], "a line is rounded to the cent before it is summed"),
+    (QT, "unknown service priced", [("        if service is None:\n            lines.append(Line(None", "        if False:\n            lines.append(Line(None")],
+     ["not_in_the_schedule", "match_an_oracle"], "a service nobody priced must not get a price"),
+    (QT, "zero quantity priced", [("        if r.quantity <= 0:", "        if False:")],
+     ["each_rule_that_needs_a_person", "match_an_oracle"], "a line with no quantity is a question for a person"),
+    (QT, "minimum quantity exclusive", [("if r.quantity < service.minimum:", "if r.quantity <= service.minimum:")],
+     ["each_rule_that_needs_a_person", "match_an_oracle"], "exactly the minimum is allowed"),
+    (QT, "maximum quantity exclusive", [("if service.maximum is not None and r.quantity > service.maximum:", "if service.maximum is not None and r.quantity >= service.maximum:")],
+     ["each_rule_that_needs_a_person", "match_an_oracle"], "exactly the maximum is allowed"),
+    (QT, "review service not flagged", [("        if service.needs_review:", "        if False:")],
+     ["each_rule_that_needs_a_person", "match_an_oracle"], "a service marked for review reaches a person"),
+    (QT, "discount not capped", [("applied = min(asked_discount, schedule.discount_authority_percent)", "applied = asked_discount")],
+     ["capped_at_the_authority", "match_an_oracle"], "a discount above the director's authority must not be applied"),
+    (QT, "discount at the authority flagged", [("if asked_discount > schedule.discount_authority_percent:", "if asked_discount >= schedule.discount_authority_percent:")],
+     ["capped_at_the_authority", "match_an_oracle"], "exactly the authority needs no flag"),
+    (QT, "tax on the undiscounted subtotal", [("    taxable = subtotal - discount", "    taxable = subtotal")],
+     ["capped_at_the_authority", "match_an_oracle"], "tax is charged on what the client pays"),
+    (QT, "minimum quote exclusive", [("if total < schedule.minimum_total:", "if total <= schedule.minimum_total:")],
+     ["under_the_minimum", "match_an_oracle"], "exactly the minimum quote is allowed"),
+    (QT, "unknown placeholder allowed", [("    if unknown:\n        raise CompareError(\"the template uses", "    if False:\n        raise CompareError(\"the template uses")],
+     ["filled_by_name"], "a blank in a client's document is worse than an error"),
+    (QT, "open flags allowed", [("    if open_flags:", "    if False:")],
+     ["every_flag_needs", "command_line_drafts"], "an unacknowledged flag must stop the approval"),
+    (QT, "reason not required", [("if not isinstance(reason, str) or len(reason.strip()) < MIN_REASON_CHARS:", "if False:")],
+     ["acknowledgement_that_breaks"], "an acknowledgement with no reason is not a record"),
+    (QT, "unknown flag allowed", [('        if a["flag"] not in known:', "        if False:")],
+     ["acknowledgement_that_breaks"], "an acknowledgement of a flag that does not exist"),
+    (QT, "double acknowledgement allowed", [('        elif a["flag"] in done:', "        elif False:")],
+     ["acknowledgement_that_breaks"], "two acknowledgements of one flag disagree"),
+    (QT, "quote reviewer not required", [("    if not isinstance(reviewer, str) or len(reviewer.strip()) < 2:", "    if False:")],
+     ["acknowledgement_that_breaks"], "an approval with no name is no approval"),
+    (QT, "quote hash not verified", [("    if hashlib.sha256(_canonical(body)).hexdigest() != stored:", "    if False:")],
+     ["every_kind_of_touching"], "a changed line or total must be found"),
+    (QT, "quote approval hash not verified", [('    if raw.get("approval_sha256") != hashlib.sha256(_canonical({"quote_sha256": stored, "reviewer": reviewer, "acknowledgements": acks})).hexdigest():', "    if False:")],
+     ["every_kind_of_touching"], "a changed acknowledgement or reviewer must be found"),
+    (QT, "quote checkpoint not re-run on verify", [("    if missing:\n        raise CompareError(\"not approved: flags with no acknowledgement", "    if False:\n        raise CompareError(\"not approved: flags with no acknowledgement")],
+     ["forged_approval"], "a consistent hash with a missing acknowledgement must still fail"),
+    (QT, "extractor quote not checked", [("        if not quote or quote not in haystack:", "        if not quote:")],
+     ["grounded_in_the_enquiry"], "a model must not add a service the client never asked for"),
+    (QT, "extractor service not checked", [('        if _service_for(item["service"], schedule) is None:', "        if False:")],
+     ["grounded_in_the_enquiry"], "a service outside the schedule has no price"),
+    (QT, "extractor zero quantity allowed", [('"an extracted quantity", allow_zero=False)', '"an extracted quantity", allow_zero=True)')],
+     ["grounded_in_the_enquiry"], "a quantity of zero is not a request"),
+    (QT, "alias collision allowed", [("            if w in names and names[w] != code:", "            if False:")],
+     ["bad_fee_schedule"], "one phrase must not name two services"),
+    (QT, "duplicate service code allowed", [("        if code in codes:", "        if False:")],
+     ["bad_fee_schedule"], "two services with one code"),
+    (QT, "tax given as a percent allowed", [("    if tax > 1:", "    if False:")],
+     ["bad_fee_schedule"], "a tax rate of 10 would multiply every total by eleven"),
+    (QT, "authority above 100 allowed", [("    if authority > 100:", "    if False:")],
+     ["bad_fee_schedule"], "an authority above 100 percent is a typo"),
+    (QT, "max below min allowed", [("        if maximum is not None and maximum < minimum:", "        if False:")],
+     ["bad_fee_schedule"], "a range nothing can satisfy"),
+    (QT, "empty enquiry allowed", [("    if not lines:", "    if False:")],
+     ["unusable_enquiry"], "a quote for nothing"),
+    (QCLI, "tampered quote file approved", [('if recompute_hash(quote) != raw.get("quote_sha256") or quote.to_dict() != raw:', 'if quote.to_dict() != raw:')],
+     ["command_line_drafts"], "the command must not trust the hash written in a file it reads"),
 ]
 
 
 def _clean_bytecode() -> None:
-    for stale in (APP / "__pycache__").glob("*.pyc"):
+    for stale in list((APP / "__pycache__").glob("*.pyc")) + list((QT.parent / "__pycache__").glob("*.pyc")):
         stale.unlink(missing_ok=True)
 
 

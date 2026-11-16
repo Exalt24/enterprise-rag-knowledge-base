@@ -1,0 +1,20 @@
+QUOTATION Q-1001
+Client: Marlow Council
+Currency: AUD
+
+SI-01    Site inspection                           2 visit  x     850.00 =      1700.00
+CR-02    Condition report                          1 report x    1450.00 =      1450.00
+DD-03    Design drawing set                       12 sheet  x     620.00 =      7440.00
+-        geotechnical investigation                1        x          - =     NO PRICE
+CE-04    Certification letter                      0 letter x     380.00 =     NO PRICE
+
+Subtotal   10590.00
+Discount   1059.00
+GST        953.10
+Total      10484.10
+
+DRAFT for review. Open points:
+L3: Design drawing set is marked in the fee schedule as needing a person's review
+L4: 'geotechnical investigation' is not in the fee schedule, so it has no price
+L5: Certification letter has no quantity in the enquiry line 'certification letter x 0'
+DISCOUNT: a discount of 15 percent was asked for and the schedule allows 10, so 10 was applied

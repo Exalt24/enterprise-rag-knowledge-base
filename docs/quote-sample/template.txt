@@ -1,0 +1,13 @@
+QUOTATION {reference}
+Client: {client}
+Currency: {currency}
+
+{lines}
+
+Subtotal   {subtotal}
+Discount   {discount}
+GST        {tax}
+Total      {total}
+
+DRAFT for review. Open points:
+{flags}

@@ -1,0 +1,77 @@
+{
+  "body": "QUOTATION Q-1001\nClient: Marlow Council\nCurrency: AUD\n\nSI-01    Site inspection                           2 visit  x     850.00 =      1700.00\nCR-02    Condition report                          1 report x    1450.00 =      1450.00\nDD-03    Design drawing set                       12 sheet  x     620.00 =      7440.00\n-        geotechnical investigation                1        x          - =     NO PRICE\nCE-04    Certification letter                      0 letter x     380.00 =     NO PRICE\n\nSubtotal   10590.00\nDiscount   1059.00\nGST        953.10\nTotal      10484.10\n\nDRAFT for review. Open points:\nL3: Design drawing set is marked in the fee schedule as needing a person's review\nL4: 'geotechnical investigation' is not in the fee schedule, so it has no price\nL5: Certification letter has no quantity in the enquiry line 'certification letter x 0'\nDISCOUNT: a discount of 15 percent was asked for and the schedule allows 10, so 10 was applied\n",
+  "client": "Marlow Council",
+  "currency": "AUD",
+  "discount": "1059.00",
+  "discount_percent": "10",
+  "flags": [
+    {
+      "id": "L3",
+      "reason": "Design drawing set is marked in the fee schedule as needing a person's review"
+    },
+    {
+      "id": "L4",
+      "reason": "'geotechnical investigation' is not in the fee schedule, so it has no price"
+    },
+    {
+      "id": "L5",
+      "reason": "Certification letter has no quantity in the enquiry line 'certification letter x 0'"
+    },
+    {
+      "id": "DISCOUNT",
+      "reason": "a discount of 15 percent was asked for and the schedule allows 10, so 10 was applied"
+    }
+  ],
+  "lines": [
+    {
+      "amount": "1700.00",
+      "code": "SI-01",
+      "description": "Site inspection",
+      "quantity": "2",
+      "rate": "850.00",
+      "source": "2 x site inspection",
+      "unit": "visit"
+    },
+    {
+      "amount": "1450.00",
+      "code": "CR-02",
+      "description": "Condition report",
+      "quantity": "1",
+      "rate": "1450.00",
+      "source": "1 x condition report",
+      "unit": "report"
+    },
+    {
+      "amount": "7440.00",
+      "code": "DD-03",
+      "description": "Design drawing set",
+      "quantity": "12",
+      "rate": "620.00",
+      "source": "12 x drawings",
+      "unit": "sheet"
+    },
+    {
+      "amount": null,
+      "code": null,
+      "description": "geotechnical investigation",
+      "quantity": "1",
+      "rate": null,
+      "source": "1 x geotechnical investigation",
+      "unit": ""
+    },
+    {
+      "amount": null,
+      "code": "CE-04",
+      "description": "Certification letter",
+      "quantity": "0",
+      "rate": "380.00",
+      "source": "certification letter x 0",
+      "unit": "letter"
+    }
+  ],
+  "quote_sha256": "55c39b05d79716ab5b182429920167c21c8f6a4c5210ae962a08f106c80e2082",
+  "reference": "Q-1001",
+  "subtotal": "10590.00",
+  "tax": "953.10",
+  "total": "10484.10"
+}

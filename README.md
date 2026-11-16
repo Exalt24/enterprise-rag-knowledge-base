@@ -95,7 +95,7 @@ The mixed archive holds a corrupt PDF, a password protected PDF, a fake workbook
 
 ## Compare two PDFs against requirements
 
-`python -m app.compare compare a.pdf b.pdf --requirements requirements.json --out report.json` (or `POST /api/compare`) checks two PDFs against a checklist and reports each finding as met, discrepancy, missing or unclear, with the page and the quoted words. A page with no text is flagged, never read as empty. Blocking findings need a named reviewer before `review` approves. [Sample run and limits](docs/compare.md).
+`python -m app.compare compare a.pdf b.pdf --requirements requirements.json --out report.json` checks two PDFs against a checklist and reports each finding as met, discrepancy, missing or unclear, with the page and the quoted words. A page with no text is flagged, never read as empty. Blocking findings need a named reviewer before `review` approves ([docs](docs/compare.md)). `python -m app.quote draft` also prices a quotation from a fee schedule and flags what a person must settle ([docs](docs/quote.md)).
 
 ## Source view
 
@@ -113,7 +113,7 @@ Each citation opens a side panel with the cited passage in its document: the tex
 
 ## Architecture and more
 
-The diagram and the flows are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. Also here: an [Agent Skill](skills/querying-knowledge-base/SKILL.md) for the MCP tools ([details](docs/evaluation.md#agent-skill)) and a Vertex AI Gemini provider **built and tested against a stand-in server** ([details](docs/vertex-provider.md)).
+The diagram and the flows are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. Also here: an [Agent Skill](skills/querying-knowledge-base/SKILL.md) for the MCP tools and a Vertex AI Gemini provider **built and tested against a stand-in server** ([details](docs/vertex-provider.md)).
 
 ## Run it
 
@@ -128,7 +128,7 @@ python -m pytest tests/test_eval_*.py             # the shell expands the glob
 python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 ```
 
-None of these needs a running service, a model download, a key or a network. Each feature's own docs page lists its tests.
+None of these needs a running service, a model download, a key or a network.
 
 ## Next steps
 

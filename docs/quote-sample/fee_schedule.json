@@ -1,0 +1,11 @@
+{
+  "currency": "AUD",
+  "tax_rate": "0.10",
+  "rules": {"discount_authority_percent": "10", "minimum_quote_total": "1000.00"},
+  "services": [
+    {"code": "SI-01", "name": "Site inspection", "unit": "visit", "rate": "850.00", "aliases": ["site visit", "inspection"], "min_qty": "1", "max_qty": "5"},
+    {"code": "CR-02", "name": "Condition report", "unit": "report", "rate": "1450.00", "aliases": ["condition assessment"], "min_qty": "1", "max_qty": "3"},
+    {"code": "DD-03", "name": "Design drawing set", "unit": "sheet", "rate": "620.00", "aliases": ["drawings"], "min_qty": "1", "max_qty": "40", "needs_review": true},
+    {"code": "CE-04", "name": "Certification letter", "unit": "letter", "rate": "380.00", "aliases": ["certification"], "min_qty": "1", "max_qty": "10"}
+  ]
+}

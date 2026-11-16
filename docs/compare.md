@@ -1,6 +1,6 @@
 # Compare two PDFs against requirements
 
-`app/compare/` reads two PDF documents, checks them against a requirements file and writes a structured QA report. Every finding names the document, the page and the words copied from that page. It is a plain Python package on the same `pypdf` the loader uses, with a command line and one FastAPI route, and it needs no Qdrant, no model and no network.
+`app/compare/` reads a pair of PDFs, checks them against a requirements file and writes a structured QA report. Every finding names the document, the page and the words copied from that page. It is a plain Python package on the same `pypdf` the loader uses, with a command line and one FastAPI route, and it needs no Qdrant, no model and no network.
 
 The documents here are invented: a made-up footbridge design basis (document A) and a made-up calculation report (document B) that is meant to be checked against it. They are in [compare-sample/](compare-sample/), written by `compare-sample/make_samples.py`, and a test checks the committed files are exactly what that script writes.
 
@@ -74,7 +74,7 @@ A report does not clear a package by itself. Every finding that is blocking and 
 ```bash
 cd backend
 python -m pytest tests/test_compare_check.py tests/test_compare_approval.py tests/test_compare_property.py     # 209 tests, no service, no key
-python tests/mutation_check_compare.py                                                                     # 61 guards broken one at a time; edits source, so use a copy
+python tests/mutation_check_compare.py                                                                     # 91 guards (this check and the quotation drafter) broken one at a time; edits source, so use a copy
 ```
 
 The property file builds 80 seeded worlds of two generated PDFs each (the same figure present, absent, repeated, contradicted or in a format that is not understood; units that differ; 0 to 2 pages with no text; phrases in random case and broken over two lines; noise lines that look like the requirements) and checks every finding against the status the plan says it must have, and that a quote is words from its page. A coverage test checks the 80 worlds reach every status for every rule that can give it, which is how a generator that never produced an agreeing fee was found and fixed. The mutation check removes each guard in turn (a comparison edge, a boundary, a refusal, the hash) and requires a named test to fail; the first run left one guard covered by the wrong test, and that test was tightened.
