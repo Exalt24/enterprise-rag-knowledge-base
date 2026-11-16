@@ -1,0 +1,74 @@
+{
+  "requirements": [
+    {
+      "id": "R1",
+      "kind": "match",
+      "pattern": "design wind speed:? (?P<value>[0-9][0-9,.]*) (?P<unit>m/s|km/h)",
+      "severity": "blocking",
+      "title": "Design wind speed agrees with the design basis"
+    },
+    {
+      "id": "R2",
+      "kind": "match",
+      "pattern": "design life:? (?P<value>[0-9][0-9,.]*) (?P<unit>years)",
+      "severity": "major",
+      "title": "Design life agrees with the design basis"
+    },
+    {
+      "document": "b",
+      "id": "R3",
+      "kind": "limit",
+      "min": "40",
+      "pattern": "concrete grade:? (?P<value>[0-9][0-9,.]*) (?P<unit>MPa)",
+      "severity": "blocking",
+      "title": "Concrete grade is at least the basis grade",
+      "unit": "MPa"
+    },
+    {
+      "document": "b",
+      "id": "R4",
+      "kind": "forbidden",
+      "phrase": "DRAFT - NOT FOR ISSUE",
+      "severity": "blocking",
+      "title": "The report is not stamped as a draft"
+    },
+    {
+      "document": "b",
+      "id": "R5",
+      "kind": "present",
+      "phrase": "checked by a second engineer",
+      "severity": "blocking",
+      "title": "The report records an independent check"
+    },
+    {
+      "id": "R6",
+      "kind": "match",
+      "pattern": "deck live load:? (?P<value>[0-9][0-9,.]*) (?P<unit>kPa)",
+      "severity": "major",
+      "title": "Deck live load agrees with the design basis"
+    },
+    {
+      "id": "R7",
+      "kind": "match",
+      "pattern": "fee estimate:? (?P<value>[0-9][0-9,.]*) (?P<unit>AUD)",
+      "severity": "major",
+      "title": "Fee estimate agrees with the design basis"
+    },
+    {
+      "document": "a",
+      "id": "R8",
+      "kind": "present",
+      "phrase": "Revision:",
+      "severity": "major",
+      "title": "The basis is issued at a named revision"
+    },
+    {
+      "document": "b",
+      "id": "R9",
+      "kind": "judge",
+      "severity": "minor",
+      "text": "The report states how the footbridge deck was checked for pedestrian vibration.",
+      "title": "The report says how the deck was checked for pedestrian vibration"
+    }
+  ]
+}

@@ -25,6 +25,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.routes import router
+from app.compare.api import router as compare_router
 from app.core.config import settings
 from app.core.rate_limiter import RateLimitMiddleware
 from app.services.vector_store import VectorStoreUnavailable
@@ -84,6 +85,8 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router, prefix="/api", tags=["RAG"])
+# Two PDFs checked against a requirements file: POST /api/compare (docs/compare.md)
+app.include_router(compare_router, prefix="/api", tags=["Compare"])
 
 
 @app.exception_handler(VectorStoreUnavailable)

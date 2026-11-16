@@ -88,6 +88,14 @@ jobs:
       # embedder stand in for Qdrant and the model; nothing here needs Docker or a network. Its own invocation.
       - name: Archive ingestion and source view tests
         run: python -m pytest tests/test_archive_guard.py tests/test_archive_pipeline.py tests/test_archive_api.py tests/test_source_view.py tests/test_hatchet_tasks.py
+      # Two PDFs against a requirements file (app/compare): page reading, the requirement rules, the judge's grounding, the
+      # approval checkpoint, the command line, the HTTP route and 80 seeded worlds, then the same tests against copies of the
+      # code with one guard removed at a time. The test PDFs are written by tests/compare_pdfs.py, so nothing needs a file,
+      # Qdrant or a model.
+      - name: Document comparison tests
+        run: python -m pytest tests/test_compare_check.py tests/test_compare_approval.py tests/test_compare_property.py
+      - name: Document comparison mutation check
+        run: python tests/mutation_check_compare.py
       - name: Deterministic evaluation check
         run: python eval/run_eval.py --check
       # The ingestion mutants run in their own job below, so this one keeps its old length.

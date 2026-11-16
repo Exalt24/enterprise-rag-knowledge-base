@@ -1,0 +1,164 @@
+{
+  "documents": {
+    "a": {
+      "name": "design_basis.pdf",
+      "pages": 2,
+      "sha256": "e0847aa11ef303f2154c11e2ae984e694690896a7577a2dfd4705bb1a161ae56",
+      "unreadable_pages": []
+    },
+    "b": {
+      "name": "calculation_report.pdf",
+      "pages": 4,
+      "sha256": "8ef1807a065652ddbc5bc27a12e319e8f4801b581f36a56db1a11409d590a33e",
+      "unreadable_pages": [
+        3
+      ]
+    }
+  },
+  "findings": [
+    {
+      "evidence": [
+        {
+          "document": "a",
+          "page": 1,
+          "quote": "DESIGN BASIS - MARLOW CREEK FOOTBRIDGE Design wind speed: 45 m/s Design life: 50 years Concrete grade: 40 MPa Deck..."
+        },
+        {
+          "document": "b",
+          "page": 1,
+          "quote": "...OW CREEK FOOTBRIDGE Status: DRAFT - NOT FOR ISSUE Design wind speed: 40 m/s"
+        }
+      ],
+      "id": "R1",
+      "reason": "document A says 45 and document B says 40",
+      "severity": "blocking",
+      "status": "discrepancy",
+      "title": "Design wind speed agrees with the design basis"
+    },
+    {
+      "evidence": [
+        {
+          "document": "a",
+          "page": 1,
+          "quote": "...MARLOW CREEK FOOTBRIDGE Design wind speed: 45 m/s Design life: 50 years Concrete grade: 40 MPa Deck live load: 5.0 kPa"
+        },
+        {
+          "document": "b",
+          "page": 2,
+          "quote": "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+        }
+      ],
+      "id": "R2",
+      "reason": "both documents say 50",
+      "severity": "major",
+      "status": "met",
+      "title": "Design life agrees with the design basis"
+    },
+    {
+      "evidence": [
+        {
+          "document": "b",
+          "page": 2,
+          "quote": "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+        }
+      ],
+      "id": "R3",
+      "reason": "32 is below the minimum 40",
+      "severity": "blocking",
+      "status": "discrepancy",
+      "title": "Concrete grade is at least the basis grade"
+    },
+    {
+      "evidence": [
+        {
+          "document": "b",
+          "page": 1,
+          "quote": "...CULATION REPORT - MARLOW CREEK FOOTBRIDGE Status: DRAFT - NOT FOR ISSUE Design wind speed: 40 m/s"
+        }
+      ],
+      "id": "R4",
+      "reason": "\"DRAFT - NOT FOR ISSUE\" must not appear and does",
+      "severity": "blocking",
+      "status": "discrepancy",
+      "title": "The report is not stamped as a draft"
+    },
+    {
+      "evidence": [],
+      "id": "R5",
+      "reason": "\"checked by a second engineer\" was not found, but there is no text to read on document B page 3, so it may be there",
+      "severity": "blocking",
+      "status": "unclear",
+      "title": "The report records an independent check"
+    },
+    {
+      "evidence": [
+        {
+          "document": "a",
+          "page": 1,
+          "quote": "...m/s Design life: 50 years Concrete grade: 40 MPa Deck live load: 5.0 kPa"
+        },
+        {
+          "document": "b",
+          "page": 2,
+          "quote": "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+        }
+      ],
+      "id": "R6",
+      "reason": "both documents say 5.0",
+      "severity": "major",
+      "status": "met",
+      "title": "Deck live load agrees with the design basis"
+    },
+    {
+      "evidence": [
+        {
+          "document": "a",
+          "page": 2,
+          "quote": "Fee estimate: 18,400 AUD All calculations are to be checked by a second en..."
+        },
+        {
+          "document": "b",
+          "page": 4,
+          "quote": "Fee estimate: 18,400 AUD"
+        }
+      ],
+      "id": "R7",
+      "reason": "both documents say 18400",
+      "severity": "major",
+      "status": "met",
+      "title": "Fee estimate agrees with the design basis"
+    },
+    {
+      "evidence": [],
+      "id": "R8",
+      "reason": "\"Revision:\" is not in document A",
+      "severity": "major",
+      "status": "missing",
+      "title": "The basis is issued at a named revision"
+    },
+    {
+      "evidence": [],
+      "id": "R9",
+      "reason": "no judge is configured, so a statement in words is not checked",
+      "severity": "minor",
+      "status": "unclear",
+      "title": "The report says how the deck was checked for pedestrian vibration"
+    }
+  ],
+  "judge": null,
+  "report_sha256": "e43796303cc9c6a7e7f11105cc02be5cca6f5091a4f8f078d71ba8b9d0fac84d",
+  "requirements_sha256": "ea5c604b5b8f9105922c74d23d3a5a6bac8b9879f9004897cabb0c34cd9a117a",
+  "summary": {
+    "discrepancy": 3,
+    "met": 3,
+    "missing": 1,
+    "open_blocking": [
+      "R1",
+      "R3",
+      "R4",
+      "R5"
+    ],
+    "unclear": 2
+  },
+  "version": 1
+}

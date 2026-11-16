@@ -1,0 +1,32 @@
+QA REPORT e43796303cc9
+
+Document A: design_basis.pdf (2 pages)
+Document B: calculation_report.pdf (4 pages, no text on page 3 (not read))
+
+R1  [blocking] DISCREPANCY: Design wind speed agrees with the design basis
+    document A says 45 and document B says 40
+    A p.1: "DESIGN BASIS - MARLOW CREEK FOOTBRIDGE Design wind speed: 45 m/s Design life: 50 years Concrete grade: 40 MPa Deck..."
+    B p.1: "...OW CREEK FOOTBRIDGE Status: DRAFT - NOT FOR ISSUE Design wind speed: 40 m/s"
+R2  [major] MET: Design life agrees with the design basis
+    A p.1: "...MARLOW CREEK FOOTBRIDGE Design wind speed: 45 m/s Design life: 50 years Concrete grade: 40 MPa Deck live load: 5.0 kPa"
+    B p.2: "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+R3  [blocking] DISCREPANCY: Concrete grade is at least the basis grade
+    32 is below the minimum 40
+    B p.2: "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+R4  [blocking] DISCREPANCY: The report is not stamped as a draft
+    "DRAFT - NOT FOR ISSUE" must not appear and does
+    B p.1: "...CULATION REPORT - MARLOW CREEK FOOTBRIDGE Status: DRAFT - NOT FOR ISSUE Design wind speed: 40 m/s"
+R5  [blocking] UNCLEAR: The report records an independent check
+    "checked by a second engineer" was not found, but there is no text to read on document B page 3, so it may be there
+R6  [major] MET: Deck live load agrees with the design basis
+    A p.1: "...m/s Design life: 50 years Concrete grade: 40 MPa Deck live load: 5.0 kPa"
+    B p.2: "Design life: 50 years Concrete grade: 32 MPa Deck live load: 5.0 kPa"
+R7  [major] MET: Fee estimate agrees with the design basis
+    A p.2: "Fee estimate: 18,400 AUD All calculations are to be checked by a second en..."
+    B p.4: "Fee estimate: 18,400 AUD"
+R8  [major] MISSING: The basis is issued at a named revision
+    "Revision:" is not in document A
+R9  [minor] UNCLEAR: The report says how the deck was checked for pedestrian vibration
+    no judge is configured, so a statement in words is not checked
+
+met 3, discrepancy 3, missing 1, unclear 2; open blocking: R1, R3, R4, R5

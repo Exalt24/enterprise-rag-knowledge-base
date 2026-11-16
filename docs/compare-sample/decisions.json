@@ -1,0 +1,22 @@
+{
+  "decisions": [
+    {
+      "decision": "accept",
+      "finding": "R1"
+    },
+    {
+      "decision": "accept",
+      "finding": "R3"
+    },
+    {
+      "decision": "waive",
+      "finding": "R4",
+      "reason": "The stamp is the template footer and the issue copy is made without it."
+    },
+    {
+      "decision": "reject",
+      "finding": "R5",
+      "reason": "The scanned page 3 is the signed checking sheet, checked by hand."
+    }
+  ]
+}

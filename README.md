@@ -17,7 +17,6 @@ Upload PDF, DOCX, XLSX, TXT or Markdown files and get cited answers (a workbook 
 - **A scoring bug that inverted the ranking.** `hybrid_search` ran `1 / (1 + score)` on a cosine similarity that was already "higher is better", so a 0.82 match scored 0.549 and a 0.12 match 0.893, and every test stayed green because they only checked that results came back. The fix uses the cosine score directly, `backend/tests/test_hybrid_ranking.py` fails on the old line, and the mutation check puts the bug back and shows a test going red. An earlier accuracy series (about 40, 60 and 67.7 percent) predated the fix and is retracted.
 - **A silent fallback.** `hybrid_search` caught every exception and answered with plain vector search, so a broken BM25 branch looked like working hybrid retrieval. The engine now counts fallbacks and the evaluation fails above zero.
 - **A deploy that looked like a slow cold start.** The default torch wheel (526.6 MB) got the 512 MB free instance OOM-killed on import. The image now uses fastembed (same weights, ONNX Runtime), and import fell from about two minutes to 1.87 seconds (once, no log).
-- **A retired model.** Groq retired the model this service named in seven places. It is now one setting, `GROQ_MODEL`.
 
 Full write-up: [docs/engineering-notes.md](docs/engineering-notes.md).
 
@@ -94,6 +93,10 @@ The mixed archive holds a corrupt PDF, a password protected PDF, a fake workbook
 
 **Limits:** built on hatchet-lite, Hatchet's development image, as one worker on one machine, and the API and worker share a spool folder. The SDK's worker needs POSIX, so on Windows it runs in Docker. Once a task sat queued for about four minutes until another run woke the scheduler (lite v0.114.2); I did not find why.
 
+## Compare two PDFs against requirements
+
+`python -m app.compare compare a.pdf b.pdf --requirements requirements.json --out report.json` (or `POST /api/compare`) checks two PDFs against a checklist and reports each finding as met, discrepancy, missing or unclear, with the page and the quoted words. A page with no text is flagged, never read as empty. Blocking findings need a named reviewer before `review` approves. [Sample run and limits](docs/compare.md).
+
 ## Source view
 
 Each citation opens a side panel with the cited passage in its document: the text highlighted, the chunks above and below it, the document name and the place (a PDF page, which the loader already keeps, the sheet and cells of a workbook, or a chunk number). `GET /api/documents/{doc_id}/chunks/{chunk_id}?context=2` serves it. A Playwright test clicks a citation on the demo corpus and checks that the highlighted text is the cited chunk.
@@ -106,15 +109,15 @@ Each citation opens a side panel with the cited passage in its document: the tex
 
 **Use case:** a Claude Code or other MCP client asks this knowledge base questions and gets cited answers through three read-only tools (`search_documents`, `ask_question`, `list_documents`), served by [`backend/mcp_server/server.py`](backend/mcp_server/server.py) over stdio on the official Python SDK (Python 3.11 or newer). Register it with `claude mcp add enterprise-rag -e QDRANT_URL=http://localhost:6333 -- python /abs/backend/mcp_server/server.py`. Tools, `--demo-corpus` (no Qdrant, no model) and errors: [docs/mcp-server.md](docs/mcp-server.md).
 
-**Limits:** local stdio only, read-only, not deployed, no rate limiting, never run in Claude Desktop or Claude Code (I used the SDK's client and raw JSON-RPC). Citations are the chunks the model was given, not proof of support, and retrieved text may carry an instruction the client must treat as untrusted.
+**Limits:** local stdio only, read-only, not deployed, no rate limiting, never run in Claude Desktop or Claude Code. Citations are the chunks the model was given, not proof of support, and retrieved text may carry an instruction the client must treat as untrusted.
 
 ## Architecture and more
 
-The diagram and the flows are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. Also here: an [Agent Skill](skills/querying-knowledge-base/SKILL.md) for the MCP tools ([details](docs/evaluation.md#agent-skill)) and a Vertex AI Gemini provider **built and tested against a stand-in server** ([details](docs/vertex-provider.md)). More: [docs/reference.md](docs/reference.md).
+The diagram and the flows are in [docs/SYSTEM-KNOWLEDGE.md](docs/SYSTEM-KNOWLEDGE.md#the-shape-of-the-system). Hybrid retrieval (the default) adds a flat 0.15 bonus to any chunk BM25 also returns, so BM25 is a keyword-agreement bonus, not a normalised score. Also here: an [Agent Skill](skills/querying-knowledge-base/SKILL.md) for the MCP tools ([details](docs/evaluation.md#agent-skill)) and a Vertex AI Gemini provider **built and tested against a stand-in server** ([details](docs/vertex-provider.md)).
 
 ## Run it
 
-You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled, and no account or key. [docs/reference.md](docs/reference.md#quick-start) has the steps for Qdrant, the backend (port 8001) and the front end, then API examples, Groq and deployment. The first start downloads all-MiniLM-L6-v2, and the recording used `qwen3:14b` ([how to match it](docs/reference.md#the-recording)).
+You need Docker, Python 3.13+, Node 20.9+ and Ollama with one model pulled, and no account or key. [docs/reference.md](docs/reference.md#quick-start) has the steps for Qdrant, the backend (port 8001) and the front end, then API examples, Groq and deployment. The first start downloads all-MiniLM-L6-v2.
 
 ## Tests
 
@@ -125,7 +128,7 @@ python -m pytest tests/test_eval_*.py             # the shell expands the glob
 python -m pytest tests/test_mcp_server*.py tests/test_skill_*.py
 ```
 
-None of these needs a running service, a model download, a key or a network. More: [ingestion.md](docs/ingestion.md#tests), [source-view.md](docs/source-view.md#tests), [evaluation.md](docs/evaluation.md#running-the-tests).
+None of these needs a running service, a model download, a key or a network. Each feature's own docs page lists its tests.
 
 ## Next steps
 

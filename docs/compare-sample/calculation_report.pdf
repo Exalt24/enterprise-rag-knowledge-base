@@ -1,0 +1,75 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Length 156 >>
+stream
+BT /F1 11 Tf 56 760 Td 15 TL
+(CALCULATION REPORT - MARLOW CREEK FOOTBRIDGE) Tj T*
+(Status: DRAFT - NOT FOR ISSUE) Tj T*
+(Design wind speed: 40 m/s) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 124 >>
+stream
+BT /F1 11 Tf 56 760 Td 15 TL
+(Design life: 50 years) Tj T*
+(Concrete grade: 32 MPa) Tj T*
+(Deck live load: 5.0 kPa) Tj T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 24 >>
+stream
+0.5 w 50 50 300 120 re S
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 64 >>
+stream
+BT /F1 11 Tf 56 760 Td 15 TL
+(Fee estimate: 18,400 AUD) Tj T*
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000231 00000 n 
+0000000438 00000 n 
+0000000564 00000 n 
+0000000739 00000 n 
+0000000865 00000 n 
+0000000939 00000 n 
+0000001065 00000 n 
+0000001180 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+1308
+%%EOF
