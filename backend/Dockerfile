@@ -6,7 +6,7 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM python:3.13-slim as builder
+FROM python:3.15-slim as builder
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --user -r requirements-render.txt
 # =============================================================================
 # Stage 2: Runtime
 # =============================================================================
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 
